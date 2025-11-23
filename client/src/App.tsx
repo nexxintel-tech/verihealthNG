@@ -9,6 +9,7 @@ import Dashboard from "@/pages/Dashboard";
 import Login from "@/pages/Login";
 import PatientList from "@/pages/PatientList";
 import PatientDetail from "@/pages/PatientDetail";
+import Settings from "@/pages/Settings";
 
 function Router() {
   // Enable realtime updates
@@ -20,6 +21,7 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/patients" component={PatientList} />
       <Route path="/patients/:id" component={PatientDetail} />
+      <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
   );
