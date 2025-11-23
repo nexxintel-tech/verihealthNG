@@ -1,0 +1,203 @@
+You are my senior full-stack engineer and mobile developer. Build the VeriHealth MVP exactly as specified. Follow all instructions strictly and autonomously create the required files, folders, and implementations. Maintain consistency across the entire project.
+
+📌 PROJECT OVERVIEW
+
+Build VeriHealth MVP, a cross-platform medical remote monitoring system that:
+
+Collects health data hands-free:
+
+iOS → Apple HealthKit Background Delivery
+
+Android → Google Health Connect
+
+Syncs data to Supabase in real time.
+
+Generates automated AI risk insights using Supabase Edge Functions.
+
+Displays clinician dashboards built in React + Tailwind.
+
+Sends alerts and notifications via MessageBird.
+
+Supports continuous monitoring of 16 medical conditions using vitals + behavioral metrics.
+
+📌 MVP SCOPE
+
+The MVP must support:
+
+1. iOS Native App (Swift + HealthKit)
+
+Apple HealthKit entitlement
+
+Background delivery for HR, HRV, BP, SpO2, Sleep, Steps, Cycle data, Respiratory rate, Temperature
+
+Offline sync → local queue → background push to Supabase
+
+Authentication with Supabase (magic link or OTP)
+
+Minimal UI: login + data sync status
+
+2. Android Native App (Kotlin + Health Connect)
+
+Health Connect permission model
+
+Background sync for same metrics as above
+
+Offline-first sync queue
+
+Supabase integration
+
+Minimal UI
+
+3. Backend (Supabase)
+
+Create schema + policies:
+
+Tables:
+
+users
+
+vital_readings
+
+conditions
+
+risk_scores
+
+alerts
+
+sync_logs
+
+Edge Functions:
+
+calculate_risk_score (AI logic per condition)
+
+generate_alerts
+
+process_sync_event
+
+Realtime:
+
+Clinician dashboard receives updates live.
+
+Auth:
+
+Role-based access: patient, clinician, admin.
+
+📌 4. Clinician Dashboard (React + Tailwind)
+
+Features:
+
+Login (Supabase)
+
+Patient list + search
+
+Risk scores overview
+
+Individual patient timeline charts
+
+Alerts panel
+
+Condition-specific views
+Charts: use Recharts.
+
+📌 5. Conditions Supported
+
+The system must compute risk alerts for 16 conditions:
+
+Hypertension
+
+Arrhythmia risk
+
+Heart failure early signs
+
+Respiratory disorders
+
+Sleep disorders
+
+Stress & burnout
+
+Weight/obesity
+
+Cardiometabolic risk
+
+Diabetes early detection
+
+Anaemia risk
+
+CKD early detection
+
+Infection detection
+
+Pregnancy wellness
+
+Fertility & menstruation
+
+Sedentary lifestyle
+
+Exercise recovery
+
+Risk logic is simplified using heuristic thresholds + trends for MVP.
+
+📌 TECH STACK
+
+iOS app: Swift, HealthKit
+
+Android app: Kotlin, Health Connect
+
+Backend: Supabase
+
+Dashboard: React + Tailwind
+
+AI: Supabase Edge Functions
+
+Notifications: MessageBird (WhatsApp/SMS)
+
+📌 AGENTIC WORKING INSTRUCTIONS
+
+Follow these rules continuously:
+
+Autonomously create all files and folders needed for iOS, Android, backend, and dashboard.
+
+Maintain consistent data models across all layers.
+
+When generating code, include:
+
+Imports
+
+Full file paths
+
+Full implementations
+
+Comments
+
+Validate HealthKit + Health Connect permissions.
+
+Generate database migrations.
+
+Use Supabase JS client on dashboard and mobile using REST or RPC endpoints.
+
+Use background tasks for continuous sync.
+
+Produce simple but clean UI (not UI-heavy).
+
+Ask only when a hard external dependency cannot be resolved.
+
+Everything should be optimized for a 7-day MVP finish.
+
+📌 DELIVERY PRIORITY
+
+Supabase schema + edge functions
+
+iOS app structure
+
+Android app structure
+
+Dashboard
+
+Integration tests
+
+Deployment instructions
+
+📌 FINAL INSTRUCTION
+
+Begin by scaffolding the folder structure for the entire monorepo, then proceed to implement each component step-by-step.
+Confirm architecture and start generating code immediately.
