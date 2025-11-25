@@ -106,7 +106,7 @@ export default function HeroSlider() {
               <div className="flex flex-col sm:flex-row gap-4 animate-fade-in-delay-2">
                 <Link href="/contact">
                   <button
-                    className="px-8 py-4 bg-white text-medical-blue-700 rounded-lg font-semibold hover:bg-blue-50 hover:scale-105 transition-all shadow-2xl hover:shadow-blue-500/50 inline-flex items-center justify-center gap-2"
+                    className="px-8 py-4 bg-white/95 backdrop-blur-sm border-2 border-white text-medical-blue-700 rounded-lg font-semibold hover:bg-white hover:scale-105 transition-all shadow-xl inline-flex items-center justify-center gap-2"
                     data-testid="button-request-demo"
                   >
                     Request Demo
