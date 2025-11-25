@@ -14,7 +14,7 @@ export default function Footer() {
               <img 
                 src="/verihealth-logo.png" 
                 alt="VeriHealth" 
-                className="h-12 w-auto object-contain"
+                className="h-8 w-auto object-contain"
               />
             </div>
             <p className="text-gray-600 text-sm max-w-md mb-4">
