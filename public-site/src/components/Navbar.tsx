@@ -24,12 +24,7 @@ export default function Navbar() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link href="/">
-            <div className="flex items-center gap-3 cursor-pointer group">
-              <img 
-                src="/logo.png" 
-                alt="VeriHealth Logo" 
-                className="h-10 w-10 object-contain transition-transform group-hover:scale-105"
-              />
+            <div className="flex items-center cursor-pointer group">
               <span className="font-heading font-bold text-xl text-gray-900 group-hover:text-medical-blue-600 transition-colors">VeriHealth</span>
             </div>
           </Link>
