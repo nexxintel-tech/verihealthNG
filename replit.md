@@ -75,12 +75,22 @@ The VeriHealth platform consists of two separate web applications:
 
 ### Authentication & Authorization
 
-**Planned Authentication**
-- Supabase Auth for user management (magic links or OTP)
+**Authentication System**
+- Supabase Auth for user management with email/password
+- Email confirmation workflow (currently disabled pending domain verification)
+- Password reset via secure token system
 - Role-based access: patient, clinician, admin
-- Current implementation: Mock login (demo credentials) without actual authentication
+- JWT-based session management with secure cookies
 - Problem: Need secure, healthcare-compliant user authentication
 - Solution: Supabase Auth provides HIPAA-eligible authentication when properly configured
+
+**Email Confirmation System (Disabled - Pending Domain Setup)**
+- Registration flow sends confirmation email via Resend API
+- Login blocks unconfirmed users with option to resend confirmation email
+- Password reset sends secure token links
+- Status: Fully implemented but disabled (`ENABLE_EMAIL_CONFIRMATION=false`)
+- Reason: Resend requires verified domain before sending to external addresses
+- Next steps: Acquire custom domain, verify in Resend dashboard, set `ENABLE_EMAIL_CONFIRMATION=true`
 
 ### Design Patterns
 
@@ -106,10 +116,13 @@ The VeriHealth platform consists of two separate web applications:
 - Environment variables: `SUPABASE_URL`, `SUPABASE_ANON_KEY`
 - Critical for: All persistent data storage, user authentication, real-time features
 
-**Neon Database (Alternative)**
-- Purpose: Serverless PostgreSQL (alternative to Supabase for DB only)
-- Integration: `@neondatabase/serverless` for edge-compatible PostgreSQL
-- Environment variables: `DATABASE_URL`
+**Resend**
+- Purpose: Transactional email delivery (confirmation emails, password resets)
+- Integration: `resend` npm package via Replit connector
+- Environment variables: `RESEND_API_KEY` (auto-managed by Replit)
+- Status: Fully integrated but disabled pending custom domain verification
+- Current domain: `ustoufaleo.resend.app` (test domain, can't send to external addresses)
+- Email templates: Professional HTML templates in `server/email.ts`
 
 **MessageBird (Planned)**
 - Purpose: SMS/voice alerts and notifications to clinicians
