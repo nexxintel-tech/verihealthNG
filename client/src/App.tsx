@@ -11,6 +11,7 @@ import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
+import ConfirmEmail from "@/pages/ConfirmEmail";
 import PatientList from "@/pages/PatientList";
 import PatientDetail from "@/pages/PatientDetail";
 import Settings from "@/pages/Settings";
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/register" component={Register} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/confirm-email" component={ConfirmEmail} />
       <Route path="/">
         <ProtectedRoute>
           <Dashboard />

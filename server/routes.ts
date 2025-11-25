@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import jwt from 'jsonwebtoken';
 import { supabase } from "./supabase";
 import { authenticateUser, requireRole } from "./middleware/auth";
+import { sendEmail, generateConfirmationEmail, generatePasswordResetEmail } from "./email";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   
@@ -17,6 +18,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       if (error) throw error;
+
+      // Check if email is confirmed
+      if (!data.user.email_confirmed_at) {
+        // Sign out the user immediately
+        if (data.session) {
+          await supabase.auth.admin.signOut(data.session.access_token);
+        }
+        
+        return res.status(403).json({ 
+          error: "Please confirm your email before logging in. Check your inbox for the confirmation link.",
+          requiresConfirmation: true,
+          email: data.user.email,
+        });
+      }
 
       res.json({
         user: data.user,
@@ -41,10 +56,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Clinician/admin roles must be assigned by administrators
       const role = 'patient';
 
-      // Create user in Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // Create user with email_confirm: false (user must confirm email)
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email,
         password,
+        email_confirm: false,
       });
 
       if (authError) throw authError;
@@ -68,10 +84,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw userError;
       }
 
+      // Generate confirmation link using Supabase
+      const redirectTo = `${process.env.VITE_DASHBOARD_URL || 'http://localhost:5000'}/confirm-email`;
+      const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+        type: 'signup',
+        email,
+        password,
+        options: {
+          redirectTo,
+        },
+      });
+
+      if (linkError) {
+        console.error("Error generating confirmation link:", linkError);
+        throw linkError;
+      }
+
+      // Send confirmation email via Resend
+      try {
+        const confirmationEmail = generateConfirmationEmail(email, linkData.properties.action_link);
+        await sendEmail(confirmationEmail);
+      } catch (emailError: any) {
+        console.error("Error sending confirmation email:", emailError);
+        // Don't fail registration if email fails, user can request resend
+      }
+
       res.json({
-        user: authData.user,
-        session: authData.session,
-        message: "Registration successful"
+        message: "Registration successful. Please check your email to confirm your account.",
+        requiresConfirmation: true,
       });
     } catch (error: any) {
       console.error("Registration error:", error);
@@ -95,6 +135,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/auth/resend-confirmation", async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      // Get user to verify they exist
+      const { data: { users }, error: getUserError } = await supabase.auth.admin.listUsers();
+      const user = users.find(u => u.email === email);
+
+      if (!user) {
+        // Don't reveal if user exists for security
+        return res.json({ message: "If an account exists with this email, a confirmation link has been sent." });
+      }
+
+      if (user.email_confirmed_at) {
+        return res.status(400).json({ error: "Email is already confirmed. You can log in." });
+      }
+
+      // Generate new confirmation link (use magiclink instead of signup for resend)
+      const redirectTo = `${process.env.VITE_DASHBOARD_URL || 'http://localhost:5000'}/confirm-email`;
+      const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+        type: 'magiclink',
+        email,
+        options: {
+          redirectTo,
+        },
+      });
+
+      if (linkError) throw linkError;
+
+      // Send confirmation email via Resend
+      const confirmationEmail = generateConfirmationEmail(email, linkData.properties.action_link);
+      await sendEmail(confirmationEmail);
+
+      res.json({ message: "Confirmation email sent. Please check your inbox." });
+    } catch (error: any) {
+      console.error("Resend confirmation error:", error);
+      res.status(500).json({ error: "Failed to send confirmation email" });
+    }
+  });
+
   app.post("/api/auth/forgot-password", async (req, res) => {
     try {
       const { email } = req.body;
@@ -103,16 +187,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Email is required" });
       }
 
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${process.env.VITE_DASHBOARD_URL || 'http://localhost:5000'}/reset-password`,
+      // Generate password reset link using Supabase admin
+      const redirectTo = `${process.env.VITE_DASHBOARD_URL || 'http://localhost:5000'}/reset-password`;
+      const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+        type: 'recovery',
+        email,
+        options: {
+          redirectTo,
+        },
       });
 
-      if (error) throw error;
+      if (linkError) {
+        // Don't reveal if user exists for security
+        console.error("Error generating reset link:", linkError);
+        return res.json({ message: "If an account exists with this email, a password reset link has been sent." });
+      }
 
-      res.json({ message: "Password reset email sent successfully" });
+      // Send password reset email via Resend
+      try {
+        const resetEmail = generatePasswordResetEmail(email, linkData.properties.action_link);
+        await sendEmail(resetEmail);
+      } catch (emailError: any) {
+        console.error("Error sending password reset email:", emailError);
+        throw emailError;
+      }
+
+      res.json({ message: "If an account exists with this email, a password reset link has been sent." });
     } catch (error: any) {
       console.error("Forgot password error:", error);
-      res.status(500).json({ error: error.message || "Failed to send password reset email" });
+      res.status(500).json({ error: "Failed to send password reset email" });
     }
   });
 

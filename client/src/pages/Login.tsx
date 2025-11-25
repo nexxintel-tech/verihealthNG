@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Activity, ShieldCheck, Loader2 } from "lucide-react";
+import { Activity, ShieldCheck, Loader2, Mail } from "lucide-react";
 import { login } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 
@@ -11,12 +11,16 @@ export default function Login() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [isResendingConfirmation, setIsResendingConfirmation] = useState(false);
   const [email, setEmail] = useState("clinician@verihealth.com");
   const [password, setPassword] = useState("");
+  const [showResendConfirmation, setShowResendConfirmation] = useState(false);
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setShowResendConfirmation(false);
 
     try {
       await login({ email, password });
@@ -28,20 +32,62 @@ export default function Login() {
       
       setLocation("/");
     } catch (error: any) {
-      // Provide specific feedback for email confirmation
-      const errorMessage = error.message || "Invalid email or password";
-      const isConfirmationError = errorMessage.toLowerCase().includes("email not confirmed");
-      
-      toast({
-        title: "Login failed",
-        description: isConfirmationError 
-          ? "Please check your email and click the confirmation link before logging in."
-          : errorMessage,
-        variant: "destructive",
-        duration: isConfirmationError ? 8000 : 5000,
-      });
+      // Check if this is an email confirmation error
+      const errorData = error.response?.data || {};
+      if (errorData.requiresConfirmation) {
+        setShowResendConfirmation(true);
+        setUnconfirmedEmail(errorData.email || email);
+        toast({
+          title: "Email not confirmed",
+          description: "Please check your inbox and confirm your email before logging in.",
+          variant: "destructive",
+          duration: 8000,
+        });
+      } else {
+        toast({
+          title: "Login failed",
+          description: error.message || "Invalid email or password",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    setIsResendingConfirmation(true);
+
+    try {
+      const response = await fetch('/api/auth/resend-confirmation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: unconfirmedEmail }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to resend confirmation');
+      }
+
+      toast({
+        title: "Email sent",
+        description: "Please check your inbox for the confirmation link.",
+        duration: 5000,
+      });
+
+      setShowResendConfirmation(false);
+    } catch (error: any) {
+      toast({
+        title: "Failed to send email",
+        description: error.message || "Please try again later",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResendingConfirmation(false);
     }
   };
 
@@ -112,6 +158,34 @@ export default function Login() {
               )}
             </Button>
           </form>
+
+          {showResendConfirmation && (
+            <div className="bg-amber-50 dark:bg-amber-950/20 p-4 rounded-lg border border-amber-200 dark:border-amber-800">
+              <p className="text-sm text-amber-900 dark:text-amber-100 mb-3">
+                Didn't receive the confirmation email?
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResendConfirmation}
+                disabled={isResendingConfirmation}
+                className="w-full"
+                data-testid="button-resend-confirmation"
+              >
+                {isResendingConfirmation ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Resend Confirmation Email
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
 
           <p className="text-center text-sm text-muted-foreground">
             Don't have an account?{" "}
