@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useRealtimeSubscriptions } from "@/lib/realtime";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
 import Login from "@/pages/Login";
@@ -18,10 +19,26 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
-      <Route path="/" component={Dashboard} />
-      <Route path="/patients" component={PatientList} />
-      <Route path="/patients/:id" component={PatientDetail} />
-      <Route path="/settings" component={Settings} />
+      <Route path="/">
+        <ProtectedRoute>
+          <Dashboard />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/patients">
+        <ProtectedRoute>
+          <PatientList />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/patients/:id">
+        <ProtectedRoute>
+          <PatientDetail />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/settings">
+        <ProtectedRoute>
+          <Settings />
+        </ProtectedRoute>
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );

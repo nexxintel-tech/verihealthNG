@@ -1,33 +1,110 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { supabase } from "./supabase";
+import { authenticateUser, requireRole } from "./middleware/auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Get all patients with their conditions and risk scores
-  app.get("/api/patients", async (req, res) => {
+  
+  // Auth endpoints (no authentication required)
+  app.post("/api/auth/login", async (req, res) => {
     try {
-      const { data: patients, error: patientsError } = await supabase
-        .from("patients")
-        .select(`
-          *,
-          conditions (name),
-          risk_scores (score, risk_level, last_sync)
-        `)
-        .order("created_at", { ascending: false });
+      const { email, password } = req.body;
 
-      if (patientsError) throw patientsError;
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      res.json({
+        user: data.user,
+        session: data.session,
+      });
+    } catch (error: any) {
+      console.error("Login error:", error);
+      res.status(401).json({ error: error.message || "Invalid credentials" });
+    }
+  });
+
+  app.post("/api/auth/logout", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const token = authHeader?.substring(7);
+
+      if (token) {
+        await supabase.auth.admin.signOut(token);
+      }
+
+      res.json({ message: "Logged out successfully" });
+    } catch (error) {
+      console.error("Logout error:", error);
+      res.status(500).json({ error: "Logout failed" });
+    }
+  });
+
+  app.get("/api/auth/me", authenticateUser, async (req, res) => {
+    res.json({ user: req.user });
+  });
+
+  // Protected routes - require authentication
+  
+  // Get all patients (clinicians see all, patients see only themselves)
+  app.get("/api/patients", authenticateUser, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const userRole = req.user!.role;
+
+      // Query the secure view which handles RLS automatically
+      let query = supabase
+        .from("latest_risk_scores_secure")
+        .select(`
+          patient_id,
+          patient_name,
+          patient_age,
+          patient_gender,
+          patient_status,
+          score,
+          risk_level,
+          last_sync,
+          user_id
+        `)
+        .order("updated_at", { ascending: false });
+
+      // For patients, only show their own data
+      if (userRole === 'patient') {
+        query = query.eq('user_id', userId);
+      }
+
+      const { data: riskScores, error } = await query;
+
+      if (error) throw error;
+
+      // Fetch conditions for each patient
+      const patientIds = riskScores?.map(rs => rs.patient_id) || [];
+      const { data: conditions } = await supabase
+        .from('conditions')
+        .select('patient_id, name')
+        .in('patient_id', patientIds);
+
+      // Group conditions by patient
+      const conditionsByPatient = conditions?.reduce((acc, c) => {
+        if (!acc[c.patient_id]) acc[c.patient_id] = [];
+        acc[c.patient_id].push(c.name);
+        return acc;
+      }, {} as Record<string, string[]>) || {};
 
       // Transform data to match frontend format
-      const transformedPatients = patients?.map(p => ({
-        id: p.id,
-        name: p.name,
-        age: p.age,
-        gender: p.gender,
-        conditions: p.conditions?.map((c: any) => c.name) || [],
-        riskScore: p.risk_scores?.[0]?.score || 0,
-        riskLevel: p.risk_scores?.[0]?.risk_level || "low",
-        lastSync: p.risk_scores?.[0]?.last_sync || p.created_at,
-        status: p.status,
+      const transformedPatients = riskScores?.map(rs => ({
+        id: rs.patient_id,
+        name: rs.patient_name,
+        age: rs.patient_age,
+        gender: rs.patient_gender,
+        conditions: conditionsByPatient[rs.patient_id] || [],
+        riskScore: rs.score || 0,
+        riskLevel: rs.risk_level || "low",
+        lastSync: rs.last_sync,
+        status: rs.patient_status,
       }));
 
       res.json(transformedPatients || []);
@@ -38,31 +115,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get single patient with full details
-  app.get("/api/patients/:id", async (req, res) => {
+  app.get("/api/patients/:id", authenticateUser, async (req, res) => {
     try {
       const { id } = req.params;
+      const userId = req.user!.id;
+      const userRole = req.user!.role;
 
+      // Check if user has permission to view this patient
       const { data: patient, error: patientError } = await supabase
         .from("patients")
-        .select(`
-          *,
-          conditions (name),
-          risk_scores (score, risk_level, last_sync)
-        `)
+        .select("*")
         .eq("id", id)
         .single();
 
       if (patientError) throw patientError;
+
+      // If patient role, verify they're requesting their own data
+      if (userRole === 'patient' && patient.user_id !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      // Fetch risk score from secure view
+      const { data: riskScore } = await supabase
+        .from("latest_risk_scores_secure")
+        .select("*")
+        .eq("patient_id", id)
+        .single();
+
+      // Fetch conditions
+      const { data: conditions } = await supabase
+        .from("conditions")
+        .select("name")
+        .eq("patient_id", id);
 
       const transformedPatient = {
         id: patient.id,
         name: patient.name,
         age: patient.age,
         gender: patient.gender,
-        conditions: patient.conditions?.map((c: any) => c.name) || [],
-        riskScore: patient.risk_scores?.[0]?.score || 0,
-        riskLevel: patient.risk_scores?.[0]?.risk_level || "low",
-        lastSync: patient.risk_scores?.[0]?.last_sync || patient.created_at,
+        conditions: conditions?.map((c: any) => c.name) || [],
+        riskScore: riskScore?.score || 0,
+        riskLevel: riskScore?.risk_level || "low",
+        lastSync: riskScore?.last_sync || patient.created_at,
         status: patient.status,
       };
 
@@ -74,10 +168,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get vital readings for a patient
-  app.get("/api/patients/:id/vitals", async (req, res) => {
+  app.get("/api/patients/:id/vitals", authenticateUser, async (req, res) => {
     try {
       const { id } = req.params;
       const { type, days = 7 } = req.query;
+      const userId = req.user!.id;
+      const userRole = req.user!.role;
+
+      // Check if user has permission
+      const { data: patient } = await supabase
+        .from("patients")
+        .select("user_id")
+        .eq("id", id)
+        .single();
+
+      if (userRole === 'patient' && patient?.user_id !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
 
       let query = supabase
         .from("vital_readings")
@@ -101,8 +208,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all alerts
-  app.get("/api/alerts", async (req, res) => {
+  // Get all alerts (clinicians only)
+  app.get("/api/alerts", authenticateUser, requireRole('clinician', 'admin'), async (req, res) => {
     try {
       const { data: alerts, error } = await supabase
         .from("alerts")
@@ -133,8 +240,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Mark alert as read
-  app.patch("/api/alerts/:id", async (req, res) => {
+  // Mark alert as read (clinicians only)
+  app.patch("/api/alerts/:id", authenticateUser, requireRole('clinician', 'admin'), async (req, res) => {
     try {
       const { id } = req.params;
       const { isRead } = req.body;
@@ -156,16 +263,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get dashboard stats
-  app.get("/api/dashboard/stats", async (req, res) => {
+  app.get("/api/dashboard/stats", authenticateUser, requireRole('clinician', 'admin'), async (req, res) => {
     try {
       // Get total patients
       const { count: totalPatients } = await supabase
         .from("patients")
         .select("*", { count: "exact", head: true });
 
-      // Get high risk patients
+      // Get high risk patients from secure view
       const { count: highRiskCount } = await supabase
-        .from("risk_scores")
+        .from("latest_risk_scores_secure")
         .select("*", { count: "exact", head: true })
         .eq("risk_level", "high");
 
@@ -175,9 +282,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .select("*", { count: "exact", head: true })
         .eq("is_read", false);
 
-      // Get average risk score
+      // Get average risk score from secure view
       const { data: riskScores } = await supabase
-        .from("risk_scores")
+        .from("latest_risk_scores_secure")
         .select("score");
 
       const avgRiskScore = riskScores?.length

@@ -23,14 +23,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { logout, getUser } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const [isMobileOpen, setIsMobileOpen] = React.useState(false);
+  const { toast } = useToast();
+  const user = getUser();
 
   const navItems = [
     { href: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -79,11 +83,20 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         </div>
         
-        <Button variant="ghost" className="w-full justify-start text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10" asChild>
-          <Link href="/login">
-            <LogOut className="mr-2 h-4 w-4" />
-            Sign Out
-          </Link>
+        <Button 
+          variant="ghost" 
+          className="w-full justify-start text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10"
+          onClick={async () => {
+            await logout();
+            toast({
+              title: "Signed out",
+              description: "You have been successfully logged out",
+            });
+            setLocation("/login");
+          }}
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          Sign Out
         </Button>
       </div>
     </div>
@@ -140,21 +153,28 @@ export default function Layout({ children }: LayoutProps) {
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">Dr. Smith</p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      cardiology@verihealth.com
+                    <p className="text-sm font-medium leading-none">{user?.email || "User"}</p>
+                    <p className="text-xs leading-none text-muted-foreground capitalize">
+                      {user?.role || "Role"}
                     </p>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  Settings
+                <DropdownMenuItem asChild>
+                  <Link href="/settings">Settings</Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive focus:text-destructive">
+                <DropdownMenuItem 
+                  className="text-destructive focus:text-destructive"
+                  onClick={async () => {
+                    await logout();
+                    toast({
+                      title: "Signed out",
+                      description: "You have been successfully logged out",
+                    });
+                    setLocation("/login");
+                  }}
+                >
                   Log out
                 </DropdownMenuItem>
               </DropdownMenuContent>

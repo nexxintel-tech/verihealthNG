@@ -1,3 +1,5 @@
+import { getAuthHeaders } from './auth';
+
 // API client for VeriHealth backend
 
 export interface Patient {
@@ -40,21 +42,41 @@ export interface DashboardStats {
   avgRiskScore: number;
 }
 
-// Fetch all patients
+// Fetch all patients (with authentication)
 export async function fetchPatients(): Promise<Patient[]> {
-  const response = await fetch("/api/patients");
+  const response = await fetch("/api/patients", {
+    headers: getAuthHeaders(),
+  });
+  
+  if (response.status === 401) {
+    throw new Error("Unauthorized - please log in again");
+  }
+  
   if (!response.ok) {
     throw new Error("Failed to fetch patients");
   }
+  
   return response.json();
 }
 
 // Fetch single patient
 export async function fetchPatient(id: string): Promise<Patient> {
-  const response = await fetch(`/api/patients/${id}`);
+  const response = await fetch(`/api/patients/${id}`, {
+    headers: getAuthHeaders(),
+  });
+  
+  if (response.status === 401) {
+    throw new Error("Unauthorized - please log in again");
+  }
+  
+  if (response.status === 403) {
+    throw new Error("Access denied");
+  }
+  
   if (!response.ok) {
     throw new Error("Failed to fetch patient");
   }
+  
   return response.json();
 }
 
@@ -67,19 +89,43 @@ export async function fetchPatientVitals(
   const params = new URLSearchParams({ days: days.toString() });
   if (type) params.append("type", type);
   
-  const response = await fetch(`/api/patients/${patientId}/vitals?${params}`);
+  const response = await fetch(`/api/patients/${patientId}/vitals?${params}`, {
+    headers: getAuthHeaders(),
+  });
+  
+  if (response.status === 401) {
+    throw new Error("Unauthorized - please log in again");
+  }
+  
+  if (response.status === 403) {
+    throw new Error("Access denied");
+  }
+  
   if (!response.ok) {
     throw new Error("Failed to fetch vitals");
   }
+  
   return response.json();
 }
 
 // Fetch all alerts
 export async function fetchAlerts(): Promise<Alert[]> {
-  const response = await fetch("/api/alerts");
+  const response = await fetch("/api/alerts", {
+    headers: getAuthHeaders(),
+  });
+  
+  if (response.status === 401) {
+    throw new Error("Unauthorized - please log in again");
+  }
+  
+  if (response.status === 403) {
+    throw new Error("Access denied - clinicians only");
+  }
+  
   if (!response.ok) {
     throw new Error("Failed to fetch alerts");
   }
+  
   return response.json();
 }
 
@@ -89,20 +135,43 @@ export async function markAlertAsRead(id: string, isRead: boolean): Promise<Aler
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({ isRead }),
   });
+  
+  if (response.status === 401) {
+    throw new Error("Unauthorized - please log in again");
+  }
+  
+  if (response.status === 403) {
+    throw new Error("Access denied");
+  }
+  
   if (!response.ok) {
     throw new Error("Failed to update alert");
   }
+  
   return response.json();
 }
 
 // Fetch dashboard stats
 export async function fetchDashboardStats(): Promise<DashboardStats> {
-  const response = await fetch("/api/dashboard/stats");
+  const response = await fetch("/api/dashboard/stats", {
+    headers: getAuthHeaders(),
+  });
+  
+  if (response.status === 401) {
+    throw new Error("Unauthorized - please log in again");
+  }
+  
+  if (response.status === 403) {
+    throw new Error("Access denied - clinicians only");
+  }
+  
   if (!response.ok) {
     throw new Error("Failed to fetch dashboard stats");
   }
+  
   return response.json();
 }

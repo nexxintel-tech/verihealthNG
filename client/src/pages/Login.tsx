@@ -1,11 +1,43 @@
-import { Link } from "wouter";
+import { useState } from "react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Activity, ShieldCheck, ArrowRight } from "lucide-react";
+import { Activity, ShieldCheck, Loader2 } from "lucide-react";
+import { login } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+  const [email, setEmail] = useState("clinician@verihealth.com");
+  const [password, setPassword] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      await login({ email, password });
+      
+      toast({
+        title: "Login successful",
+        description: "Welcome to VeriHealth",
+      });
+      
+      setLocation("/");
+    } catch (error: any) {
+      toast({
+        title: "Login failed",
+        description: error.message || "Invalid email or password",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen w-full grid lg:grid-cols-2">
       {/* Left: Form */}
@@ -22,18 +54,56 @@ export default function Login() {
             <p className="text-muted-foreground">Enter your credentials to access the clinician dashboard.</p>
           </div>
 
-          <div className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" placeholder="doctor@hospital.org" type="email" defaultValue="demo@verihealth.com" />
+              <Input 
+                id="email" 
+                placeholder="doctor@hospital.org" 
+                type="email" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isLoading}
+                data-testid="input-email"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" defaultValue="password123" />
+              <Input 
+                id="password" 
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={isLoading}
+                data-testid="input-password"
+              />
             </div>
-            <Button className="w-full h-11 text-base" asChild>
-              <Link href="/">Sign In</Link>
+            <Button 
+              className="w-full h-11 text-base" 
+              type="submit"
+              disabled={isLoading}
+              data-testid="button-sign-in"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign In"
+              )}
             </Button>
+          </form>
+
+          <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+            <h4 className="text-sm font-medium mb-2">Demo Credentials</h4>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p><strong>Clinician:</strong> clinician@verihealth.com</p>
+              <p><strong>Patient:</strong> patient1@example.com</p>
+              <p className="text-xs opacity-75">(You'll need to set up users in Supabase first)</p>
+            </div>
           </div>
 
           <p className="px-8 text-center text-sm text-muted-foreground">
