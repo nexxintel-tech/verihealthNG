@@ -28,7 +28,7 @@ export default function Navbar() {
               <img 
                 src="/verihealth-logo.png" 
                 alt="VeriHealth" 
-                className="h-8 w-auto object-contain transition-transform group-hover:scale-105"
+                className="h-14 w-auto object-contain transition-transform group-hover:scale-105"
               />
             </div>
           </Link>
