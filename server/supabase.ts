@@ -17,17 +17,41 @@ export const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
 export type Database = {
   public: {
     Tables: {
+      institutions: {
+        Row: {
+          id: string;
+          name: string;
+          address: string | null;
+          contact_email: string | null;
+          contact_phone: string | null;
+          is_default: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          address?: string | null;
+          contact_email?: string | null;
+          contact_phone?: string | null;
+          is_default?: boolean;
+          created_at?: string;
+        };
+      };
       users: {
         Row: {
           id: string;
           email: string;
-          role: 'patient' | 'clinician' | 'admin';
+          role: 'patient' | 'clinician' | 'admin' | 'institution_admin';
+          institution_id: string | null;
+          approval_status: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           email: string;
-          role?: 'patient' | 'clinician' | 'admin';
+          role?: 'patient' | 'clinician' | 'admin' | 'institution_admin';
+          institution_id?: string | null;
+          approval_status?: string | null;
           created_at?: string;
         };
       };
@@ -126,6 +150,26 @@ export type Database = {
           severity: 'low' | 'medium' | 'high';
           is_read?: boolean;
           timestamp?: string;
+          created_at?: string;
+        };
+      };
+      clinician_profiles: {
+        Row: {
+          id: string;
+          user_id: string;
+          full_name: string;
+          license_number: string | null;
+          specialty: string | null;
+          phone: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          full_name: string;
+          license_number?: string | null;
+          specialty?: string | null;
+          phone?: string | null;
           created_at?: string;
         };
       };

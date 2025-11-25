@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import jwt from 'jsonwebtoken';
 import { supabase } from "./supabase";
-import { authenticateUser, requireRole } from "./middleware/auth";
+import { authenticateUser, requireRole, requireApproved } from "./middleware/auth";
 import { sendEmail, generateConfirmationEmail, generatePasswordResetEmail } from "./email";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -126,6 +126,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Registration error:", error);
+      res.status(400).json({ error: error.message || "Registration failed" });
+    }
+  });
+
+  // Clinician registration endpoint
+  app.post("/api/auth/register-clinician", async (req, res) => {
+    try {
+      const { email, password, fullName, licenseNumber, specialty, phone, institutionId } = req.body;
+
+      // Validate inputs
+      if (!email || !password || !fullName) {
+        return res.status(400).json({ error: "Email, password, and full name are required" });
+      }
+
+      // Get default institution if no institution selected
+      let selectedInstitutionId = institutionId;
+      if (!selectedInstitutionId) {
+        const { data: defaultInstitution } = await supabase
+          .from('institutions')
+          .select('id')
+          .eq('is_default', true)
+          .single();
+
+        if (!defaultInstitution) {
+          return res.status(400).json({ error: "No institution available. Please contact support." });
+        }
+        selectedInstitutionId = defaultInstitution.id;
+      }
+
+      // Check if email confirmation is enabled in environment
+      const emailConfirmationEnabled = process.env.ENABLE_EMAIL_CONFIRMATION === 'true';
+
+      // Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (authError) throw authError;
+
+      if (!authData.user) {
+        return res.status(500).json({ error: "Failed to create user" });
+      }
+
+      // Create user record in users table with clinician role and pending approval
+      const { error: userError } = await supabase
+        .from('users')
+        .insert({
+          id: authData.user.id,
+          email: authData.user.email!,
+          role: 'clinician',
+          institution_id: selectedInstitutionId,
+          approval_status: 'pending',
+        });
+
+      if (userError) {
+        // If user table insert fails, try to delete the auth user
+        await supabase.auth.admin.deleteUser(authData.user.id);
+        throw userError;
+      }
+
+      // Create clinician profile
+      const { error: profileError } = await supabase
+        .from('clinician_profiles')
+        .insert({
+          user_id: authData.user.id,
+          full_name: fullName,
+          license_number: licenseNumber || null,
+          specialty: specialty || null,
+          phone: phone || null,
+        });
+
+      if (profileError) {
+        // Cleanup if profile creation fails
+        await supabase.from('users').delete().eq('id', authData.user.id);
+        await supabase.auth.admin.deleteUser(authData.user.id);
+        throw profileError;
+      }
+
+      // If email confirmation is enabled
+      if (emailConfirmationEnabled && !authData.session) {
+        const redirectTo = `${process.env.VITE_DASHBOARD_URL || 'http://localhost:5000'}/confirm-email`;
+        const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+          type: 'signup',
+          email,
+          password,
+          options: {
+            redirectTo,
+          },
+        });
+
+        if (!linkError && linkData) {
+          try {
+            const confirmationEmail = generateConfirmationEmail(email, linkData.properties.action_link);
+            await sendEmail(confirmationEmail);
+          } catch (emailError: any) {
+            console.error("Error sending confirmation email:", emailError);
+          }
+        }
+
+        return res.json({
+          message: "Registration successful. Your account is pending approval. Please check your email to confirm your account.",
+          requiresConfirmation: true,
+          requiresApproval: true,
+        });
+      }
+
+      res.json({
+        message: "Registration successful. Your account is pending approval by your institution administrator.",
+        requiresApproval: true,
+      });
+    } catch (error: any) {
+      console.error("Clinician registration error:", error);
       res.status(400).json({ error: error.message || "Registration failed" });
     }
   });
@@ -554,6 +667,163 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);
       res.status(500).json({ error: "Failed to fetch dashboard stats" });
+    }
+  });
+
+  // Institution endpoints
+  app.get("/api/institutions", async (req, res) => {
+    try {
+      const { data: institutions, error } = await supabase
+        .from('institutions')
+        .select('id, name, address')
+        .order('is_default', { ascending: false })
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+
+      res.json(institutions || []);
+    } catch (error) {
+      console.error("Error fetching institutions:", error);
+      res.status(500).json({ error: "Failed to fetch institutions" });
+    }
+  });
+
+  // Institution admin endpoints
+  app.get("/api/admin/pending-clinicians", authenticateUser, requireRole('institution_admin'), async (req, res) => {
+    try {
+      const institutionId = req.user!.institutionId;
+
+      if (!institutionId) {
+        return res.status(403).json({ error: "Institution admin must be assigned to an institution" });
+      }
+
+      // Fetch pending clinicians for the institution
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id, email, approval_status, created_at')
+        .eq('role', 'clinician')
+        .eq('institution_id', institutionId)
+        .in('approval_status', ['pending', 'rejected'])
+        .order('created_at', { ascending: false });
+
+      if (usersError) throw usersError;
+
+      if (!users || users.length === 0) {
+        return res.json([]);
+      }
+
+      // Fetch clinician profiles
+      const userIds = users.map(u => u.id);
+      const { data: profiles } = await supabase
+        .from('clinician_profiles')
+        .select('user_id, full_name, license_number, specialty, phone')
+        .in('user_id', userIds);
+
+      const profilesByUserId = profiles?.reduce((acc, p) => {
+        acc[p.user_id] = p;
+        return acc;
+      }, {} as Record<string, any>) || {};
+
+      const pendingClinicians = users.map(user => ({
+        id: user.id,
+        email: user.email,
+        approvalStatus: user.approval_status,
+        createdAt: user.created_at,
+        profile: profilesByUserId[user.id] || null,
+      }));
+
+      res.json(pendingClinicians);
+    } catch (error) {
+      console.error("Error fetching pending clinicians:", error);
+      res.status(500).json({ error: "Failed to fetch pending clinicians" });
+    }
+  });
+
+  app.post("/api/admin/approve-clinician", authenticateUser, requireRole('institution_admin'), async (req, res) => {
+    try {
+      const { clinicianId } = req.body;
+      const institutionId = req.user!.institutionId;
+
+      if (!clinicianId) {
+        return res.status(400).json({ error: "Clinician ID is required" });
+      }
+
+      if (!institutionId) {
+        return res.status(403).json({ error: "Institution admin must be assigned to an institution" });
+      }
+
+      // Verify the clinician belongs to this institution
+      const { data: clinician, error: fetchError } = await supabase
+        .from('users')
+        .select('id, institution_id')
+        .eq('id', clinicianId)
+        .eq('role', 'clinician')
+        .single();
+
+      if (fetchError || !clinician) {
+        return res.status(404).json({ error: "Clinician not found" });
+      }
+
+      if (clinician.institution_id !== institutionId) {
+        return res.status(403).json({ error: "Cannot approve clinicians from other institutions" });
+      }
+
+      // Approve the clinician
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ approval_status: 'approved' })
+        .eq('id', clinicianId);
+
+      if (updateError) throw updateError;
+
+      res.json({ message: "Clinician approved successfully" });
+    } catch (error) {
+      console.error("Error approving clinician:", error);
+      res.status(500).json({ error: "Failed to approve clinician" });
+    }
+  });
+
+  app.post("/api/admin/reject-clinician", authenticateUser, requireRole('institution_admin'), async (req, res) => {
+    try {
+      const { clinicianId } = req.body;
+      const institutionId = req.user!.institutionId;
+
+      if (!clinicianId) {
+        return res.status(400).json({ error: "Clinician ID is required" });
+      }
+
+      if (!institutionId) {
+        return res.status(403).json({ error: "Institution admin must be assigned to an institution" });
+      }
+
+      // Verify the clinician belongs to this institution
+      const { data: clinician, error: fetchError } = await supabase
+        .from('users')
+        .select('id, institution_id')
+        .eq('id', clinicianId)
+        .eq('role', 'clinician')
+        .single();
+
+      if (fetchError || !clinician) {
+        return res.status(404).json({ error: "Clinician not found" });
+      }
+
+      if (clinician.institution_id !== institutionId) {
+        return res.status(403).json({ error: "Cannot reject clinicians from other institutions" });
+      }
+
+      // Reject the clinician
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ approval_status: 'rejected' })
+        .eq('id', clinicianId);
+
+      if (updateError) throw updateError;
+
+      res.json({ message: "Clinician rejected" });
+    } catch (error) {
+      console.error("Error rejecting clinician:", error);
+      res.status(500).json({ error: "Failed to reject clinician" });
     }
   });
 

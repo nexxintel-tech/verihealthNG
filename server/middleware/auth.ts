@@ -8,7 +8,9 @@ declare global {
       user?: {
         id: string;
         email: string;
-        role: 'patient' | 'clinician' | 'admin';
+        role: 'patient' | 'clinician' | 'admin' | 'institution_admin';
+        institutionId?: string | null;
+        approvalStatus?: string | null;
       };
     }
   }
@@ -43,7 +45,7 @@ export async function authenticateUser(
     // Fetch user role from users table
     const { data: userData, error: userError } = await supabase
       .from('users')
-      .select('id, email, role')
+      .select('id, email, role, institution_id, approval_status')
       .eq('id', user.id)
       .single();
 
@@ -55,7 +57,9 @@ export async function authenticateUser(
     req.user = {
       id: userData.id,
       email: userData.email,
-      role: userData.role as 'patient' | 'clinician' | 'admin',
+      role: userData.role as 'patient' | 'clinician' | 'admin' | 'institution_admin',
+      institutionId: userData.institution_id,
+      approvalStatus: userData.approval_status,
     };
 
     next();
@@ -68,7 +72,7 @@ export async function authenticateUser(
 /**
  * Optional middleware: Only allow specific roles
  */
-export function requireRole(...allowedRoles: Array<'patient' | 'clinician' | 'admin'>) {
+export function requireRole(...allowedRoles: Array<'patient' | 'clinician' | 'admin' | 'institution_admin'>) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ error: 'Unauthorized' });
@@ -84,4 +88,23 @@ export function requireRole(...allowedRoles: Array<'patient' | 'clinician' | 'ad
 
     next();
   };
+}
+
+/**
+ * Middleware: Require approved status for clinicians
+ */
+export function requireApproved(req: Request, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  // Only check approval for clinicians
+  if (req.user.role === 'clinician' && req.user.approvalStatus !== 'approved') {
+    return res.status(403).json({ 
+      error: 'Account pending approval',
+      approvalStatus: req.user.approvalStatus
+    });
+  }
+
+  next();
 }
