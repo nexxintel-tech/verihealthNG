@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Menu, X, Activity } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 
 export default function Navbar() {
   const [location] = useLocation();
@@ -24,11 +24,13 @@ export default function Navbar() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link href="/">
-            <div className="flex items-center gap-2 cursor-pointer group">
-              <div className="h-9 w-9 rounded-lg bg-medical-blue-600 flex items-center justify-center text-white group-hover:bg-medical-blue-700 transition-colors">
-                <Activity className="h-5 w-5" />
-              </div>
-              <span className="font-heading font-bold text-xl text-gray-900">VeriHealth</span>
+            <div className="flex items-center gap-3 cursor-pointer group">
+              <img 
+                src="/logo.png" 
+                alt="VeriHealth Logo" 
+                className="h-10 w-10 object-contain transition-transform group-hover:scale-105"
+              />
+              <span className="font-heading font-bold text-xl text-gray-900 group-hover:text-medical-blue-600 transition-colors">VeriHealth</span>
             </div>
           </Link>
 

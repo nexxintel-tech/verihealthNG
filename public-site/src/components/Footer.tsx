@@ -1,5 +1,5 @@
 import { Link } from 'wouter';
-import { Activity, Mail, Phone, MapPin } from 'lucide-react';
+import { Mail, Phone, MapPin } from 'lucide-react';
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
@@ -10,10 +10,12 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Brand */}
           <div className="col-span-1 md:col-span-2">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="h-9 w-9 rounded-lg bg-medical-blue-600 flex items-center justify-center text-white">
-                <Activity className="h-5 w-5" />
-              </div>
+            <div className="flex items-center gap-3 mb-4">
+              <img 
+                src="/logo.png" 
+                alt="VeriHealth Logo" 
+                className="h-10 w-10 object-contain"
+              />
               <span className="font-heading font-bold text-xl text-gray-900">VeriHealth</span>
             </div>
             <p className="text-gray-600 text-sm max-w-md mb-4">
