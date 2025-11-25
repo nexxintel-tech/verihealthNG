@@ -56,11 +56,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Clinician/admin roles must be assigned by administrators
       const role = 'patient';
 
-      // Create user with email_confirm: false (user must confirm email)
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      // Check if email confirmation is enabled in environment
+      const emailConfirmationEnabled = process.env.ENABLE_EMAIL_CONFIRMATION === 'true';
+
+      // Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
-        email_confirm: false,
       });
 
       if (authError) throw authError;
@@ -84,34 +86,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw userError;
       }
 
-      // Generate confirmation link using Supabase
-      const redirectTo = `${process.env.VITE_DASHBOARD_URL || 'http://localhost:5000'}/confirm-email`;
-      const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-        type: 'signup',
-        email,
-        password,
-        options: {
-          redirectTo,
-        },
-      });
+      // If email confirmation is enabled and user needs to confirm
+      if (emailConfirmationEnabled && !authData.session) {
+        // Generate confirmation link using Supabase
+        const redirectTo = `${process.env.VITE_DASHBOARD_URL || 'http://localhost:5000'}/confirm-email`;
+        const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+          type: 'signup',
+          email,
+          password,
+          options: {
+            redirectTo,
+          },
+        });
 
-      if (linkError) {
-        console.error("Error generating confirmation link:", linkError);
-        throw linkError;
+        if (linkError) {
+          console.error("Error generating confirmation link:", linkError);
+        } else {
+          // Send confirmation email via Resend
+          try {
+            const confirmationEmail = generateConfirmationEmail(email, linkData.properties.action_link);
+            await sendEmail(confirmationEmail);
+          } catch (emailError: any) {
+            console.error("Error sending confirmation email:", emailError);
+            // Don't fail registration if email fails, user can request resend
+          }
+        }
+
+        return res.json({
+          message: "Registration successful. Please check your email to confirm your account.",
+          requiresConfirmation: true,
+        });
       }
 
-      // Send confirmation email via Resend
-      try {
-        const confirmationEmail = generateConfirmationEmail(email, linkData.properties.action_link);
-        await sendEmail(confirmationEmail);
-      } catch (emailError: any) {
-        console.error("Error sending confirmation email:", emailError);
-        // Don't fail registration if email fails, user can request resend
-      }
-
+      // Email confirmation disabled - return session
       res.json({
-        message: "Registration successful. Please check your email to confirm your account.",
-        requiresConfirmation: true,
+        user: authData.user,
+        session: authData.session,
+        message: "Registration successful"
       });
     } catch (error: any) {
       console.error("Registration error:", error);
