@@ -1,5 +1,6 @@
 import { Link } from 'wouter';
 import { Activity, Shield, Zap, Clock, ArrowRight } from 'lucide-react';
+import HeroSlider from '../components/HeroSlider';
 
 export default function Home() {
   const features = [
@@ -34,34 +35,8 @@ export default function Home() {
 
   return (
     <div className="bg-white">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-medical-blue-600 to-medical-blue-800 text-white">
-        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&q=80')] bg-cover bg-center opacity-10 mix-blend-overlay"></div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 lg:py-32">
-          <div className="max-w-3xl">
-            <h1 className="text-4xl lg:text-6xl font-heading font-bold mb-6 text-balance">
-              Advanced Remote Patient Monitoring
-            </h1>
-            <p className="text-xl lg:text-2xl text-blue-100 mb-8 text-balance">
-              Empower your healthcare team with AI-powered insights to deliver proactive, 
-              personalized care that improves patient outcomes.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/contact">
-                <button className="px-8 py-4 bg-white text-medical-blue-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors inline-flex items-center justify-center gap-2">
-                  Request Demo
-                  <ArrowRight className="h-5 w-5" />
-                </button>
-              </Link>
-              <Link href="/shop">
-                <button className="px-8 py-4 bg-transparent border-2 border-white text-white rounded-lg font-semibold hover:bg-white/10 transition-colors">
-                  View Products
-                </button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* Hero Slider Section */}
+      <HeroSlider />
 
       {/* Stats Section */}
       <section className="bg-gray-50 py-12 border-y border-gray-200">
