@@ -767,41 +767,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { clinicianId } = req.body;
       const institutionId = req.user!.institutionId;
 
-      if (!clinicianId) {
-        return res.status(400).json({ error: "Clinician ID is required" });
+      // Validate input
+      if (!clinicianId || typeof clinicianId !== 'string') {
+        return res.status(400).json({ error: "Valid clinician ID is required" });
       }
 
       if (!institutionId) {
         return res.status(403).json({ error: "Institution admin must be assigned to an institution" });
       }
 
-      // SECURITY: Verify the clinician belongs to this institution before approving
-      const { data: clinician, error: fetchError } = await supabase
-        .from('users')
-        .select('id, institution_id, role, approval_status')
-        .eq('id', clinicianId)
-        .eq('role', 'clinician')
-        .eq('institution_id', institutionId)
-        .single();
-
-      if (fetchError || !clinician) {
-        return res.status(404).json({ error: "Clinician not found or not in your institution" });
-      }
-
-      // Double-check institution ownership (defense in depth)
-      if (clinician.institution_id !== institutionId) {
-        console.error(`SECURITY VIOLATION: Admin ${req.user!.id} attempted to approve clinician ${clinicianId} from different institution`);
-        return res.status(403).json({ error: "Cannot approve clinicians from other institutions" });
-      }
-
-      // Approve the clinician
-      const { error: updateError } = await supabase
+      // SECURITY: Atomic update with institution_id filter to prevent TOCTOU
+      // This single operation ensures we only update clinicians that:
+      // 1. Match the clinicianId
+      // 2. Have role 'clinician'
+      // 3. Belong to the admin's institution
+      const { data, error: updateError, count } = await supabase
         .from('users')
         .update({ approval_status: 'approved' })
         .eq('id', clinicianId)
-        .eq('institution_id', institutionId);
+        .eq('role', 'clinician')
+        .eq('institution_id', institutionId)
+        .select();
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error("Error approving clinician:", updateError);
+        throw updateError;
+      }
+
+      // Check if any rows were actually updated
+      if (!data || data.length === 0) {
+        console.warn(`Admin ${req.user!.id} attempted to approve non-existent or cross-institution clinician ${clinicianId}`);
+        return res.status(404).json({ error: "Clinician not found or not in your institution" });
+      }
 
       res.json({ message: "Clinician approved successfully" });
     } catch (error) {
@@ -815,41 +812,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { clinicianId } = req.body;
       const institutionId = req.user!.institutionId;
 
-      if (!clinicianId) {
-        return res.status(400).json({ error: "Clinician ID is required" });
+      // Validate input
+      if (!clinicianId || typeof clinicianId !== 'string') {
+        return res.status(400).json({ error: "Valid clinician ID is required" });
       }
 
       if (!institutionId) {
         return res.status(403).json({ error: "Institution admin must be assigned to an institution" });
       }
 
-      // SECURITY: Verify the clinician belongs to this institution before rejecting
-      const { data: clinician, error: fetchError } = await supabase
-        .from('users')
-        .select('id, institution_id, role, approval_status')
-        .eq('id', clinicianId)
-        .eq('role', 'clinician')
-        .eq('institution_id', institutionId)
-        .single();
-
-      if (fetchError || !clinician) {
-        return res.status(404).json({ error: "Clinician not found or not in your institution" });
-      }
-
-      // Double-check institution ownership (defense in depth)
-      if (clinician.institution_id !== institutionId) {
-        console.error(`SECURITY VIOLATION: Admin ${req.user!.id} attempted to reject clinician ${clinicianId} from different institution`);
-        return res.status(403).json({ error: "Cannot reject clinicians from other institutions" });
-      }
-
-      // Reject the clinician
-      const { error: updateError } = await supabase
+      // SECURITY: Atomic update with institution_id filter to prevent TOCTOU
+      // This single operation ensures we only update clinicians that:
+      // 1. Match the clinicianId
+      // 2. Have role 'clinician'
+      // 3. Belong to the admin's institution
+      const { data, error: updateError } = await supabase
         .from('users')
         .update({ approval_status: 'rejected' })
         .eq('id', clinicianId)
-        .eq('institution_id', institutionId);
+        .eq('role', 'clinician')
+        .eq('institution_id', institutionId)
+        .select();
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error("Error rejecting clinician:", updateError);
+        throw updateError;
+      }
+
+      // Check if any rows were actually updated
+      if (!data || data.length === 0) {
+        console.warn(`Admin ${req.user!.id} attempted to reject non-existent or cross-institution clinician ${clinicianId}`);
+        return res.status(404).json({ error: "Clinician not found or not in your institution" });
+      }
 
       res.json({ message: "Clinician rejected" });
     } catch (error) {
