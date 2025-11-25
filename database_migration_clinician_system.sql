@@ -13,9 +13,10 @@ CREATE TABLE IF NOT EXISTS institutions (
 );
 
 -- 2. Add new columns to users table
+-- Note: approval_status defaults to NULL for existing users, but clinicians will be set to 'pending' on registration
 ALTER TABLE users 
 ADD COLUMN IF NOT EXISTS institution_id VARCHAR REFERENCES institutions(id),
-ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT 'approved';
+ADD COLUMN IF NOT EXISTS approval_status TEXT;
 
 -- 3. Create clinician_profiles table
 CREATE TABLE IF NOT EXISTS clinician_profiles (

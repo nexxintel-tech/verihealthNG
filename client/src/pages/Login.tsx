@@ -187,16 +187,28 @@ export default function Login() {
             </div>
           )}
 
-          <p className="text-center text-sm text-muted-foreground">
-            Don't have an account?{" "}
-            <a 
-              href="/register" 
-              className="underline underline-offset-4 hover:text-primary font-medium"
-              data-testid="link-register"
-            >
-              Create account
-            </a>
-          </p>
+          <div className="text-center space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Don't have an account?{" "}
+              <a 
+                href="/register" 
+                className="underline underline-offset-4 hover:text-primary font-medium"
+                data-testid="link-register"
+              >
+                Create account
+              </a>
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Healthcare provider?{" "}
+              <a 
+                href="/register-clinician" 
+                className="underline underline-offset-4 hover:text-primary font-medium"
+                data-testid="link-register-clinician"
+              >
+                Register as Clinician
+              </a>
+            </p>
+          </div>
 
           <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
             <h4 className="text-sm font-medium mb-2">Demo Credentials</h4>

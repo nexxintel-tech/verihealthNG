@@ -20,7 +20,7 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   role: text("role").notNull().default("patient"),
   institutionId: varchar("institution_id").references(() => institutions.id),
-  approvalStatus: text("approval_status").default("approved"),
+  approvalStatus: text("approval_status"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

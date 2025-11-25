@@ -16,6 +16,8 @@ import PatientList from "@/pages/PatientList";
 import PatientDetail from "@/pages/PatientDetail";
 import Alerts from "@/pages/Alerts";
 import Settings from "@/pages/Settings";
+import { ClinicianRegister } from "@/pages/ClinicianRegister";
+import { ClinicianApprovals } from "@/pages/ClinicianApprovals";
 
 function Router() {
   // Enable realtime updates
@@ -25,6 +27,7 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/register-clinician" component={ClinicianRegister} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/confirm-email" component={ConfirmEmail} />
@@ -46,6 +49,11 @@ function Router() {
       <Route path="/alerts">
         <ProtectedRoute>
           <Alerts />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/clinician-approvals">
+        <ProtectedRoute>
+          <ClinicianApprovals />
         </ProtectedRoute>
       </Route>
       <Route path="/settings">

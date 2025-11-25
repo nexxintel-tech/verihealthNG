@@ -8,7 +8,8 @@ import {
   Activity, 
   LogOut,
   Search,
-  Menu
+  Menu,
+  UserCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -37,10 +38,11 @@ export default function Layout({ children }: LayoutProps) {
   const user = getUser();
 
   const navItems = [
-    { href: "/", icon: LayoutDashboard, label: "Dashboard", roles: ['patient', 'clinician', 'admin'] },
-    { href: "/patients", icon: Users, label: "Patients", roles: ['patient', 'clinician', 'admin'] },
-    { href: "/alerts", icon: Bell, label: "Alerts", roles: ['clinician', 'admin'] },
-    { href: "/settings", icon: Settings, label: "Settings", roles: ['patient', 'clinician', 'admin'] },
+    { href: "/", icon: LayoutDashboard, label: "Dashboard", roles: ['patient', 'clinician', 'admin', 'institution_admin'] },
+    { href: "/patients", icon: Users, label: "Patients", roles: ['patient', 'clinician', 'admin', 'institution_admin'] },
+    { href: "/alerts", icon: Bell, label: "Alerts", roles: ['clinician', 'admin', 'institution_admin'] },
+    { href: "/admin/clinician-approvals", icon: UserCheck, label: "Clinician Approvals", roles: ['institution_admin'] },
+    { href: "/settings", icon: Settings, label: "Settings", roles: ['patient', 'clinician', 'admin', 'institution_admin'] },
   ];
 
   // Filter nav items based on user role

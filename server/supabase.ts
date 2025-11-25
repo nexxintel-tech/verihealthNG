@@ -43,7 +43,7 @@ export type Database = {
           email: string;
           role: 'patient' | 'clinician' | 'admin' | 'institution_admin';
           institution_id: string | null;
-          approval_status: string | null;
+          approval_status: 'pending' | 'approved' | 'rejected' | null;
           created_at: string;
         };
         Insert: {
@@ -51,7 +51,7 @@ export type Database = {
           email: string;
           role?: 'patient' | 'clinician' | 'admin' | 'institution_admin';
           institution_id?: string | null;
-          approval_status?: string | null;
+          approval_status?: 'pending' | 'approved' | 'rejected' | null;
           created_at?: string;
         };
       };

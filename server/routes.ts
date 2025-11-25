@@ -33,6 +33,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Check clinician approval status
+      const { data: userData } = await supabase
+        .from('users')
+        .select('role, approval_status')
+        .eq('id', data.user.id)
+        .single();
+
+      if (userData?.role === 'clinician' && userData?.approval_status !== 'approved') {
+        // Sign out the user
+        if (data.session) {
+          await supabase.auth.admin.signOut(data.session.access_token);
+        }
+
+        const statusMessage = userData?.approval_status === 'rejected' 
+          ? "Your clinician registration was rejected. Please contact your institution administrator."
+          : "Your clinician account is pending approval by your institution administrator.";
+
+        return res.status(403).json({ 
+          error: statusMessage,
+          approvalStatus: userData?.approval_status,
+        });
+      }
+
       res.json({
         user: data.user,
         session: data.session,
@@ -697,7 +720,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Institution admin must be assigned to an institution" });
       }
 
-      // Fetch pending clinicians for the institution
+      // SECURITY: Scope query to admin's institution only
       const { data: users, error: usersError } = await supabase
         .from('users')
         .select('id, email, approval_status, created_at')
@@ -752,19 +775,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Institution admin must be assigned to an institution" });
       }
 
-      // Verify the clinician belongs to this institution
+      // SECURITY: Verify the clinician belongs to this institution before approving
       const { data: clinician, error: fetchError } = await supabase
         .from('users')
-        .select('id, institution_id')
+        .select('id, institution_id, role, approval_status')
         .eq('id', clinicianId)
         .eq('role', 'clinician')
+        .eq('institution_id', institutionId)
         .single();
 
       if (fetchError || !clinician) {
-        return res.status(404).json({ error: "Clinician not found" });
+        return res.status(404).json({ error: "Clinician not found or not in your institution" });
       }
 
+      // Double-check institution ownership (defense in depth)
       if (clinician.institution_id !== institutionId) {
+        console.error(`SECURITY VIOLATION: Admin ${req.user!.id} attempted to approve clinician ${clinicianId} from different institution`);
         return res.status(403).json({ error: "Cannot approve clinicians from other institutions" });
       }
 
@@ -772,7 +798,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { error: updateError } = await supabase
         .from('users')
         .update({ approval_status: 'approved' })
-        .eq('id', clinicianId);
+        .eq('id', clinicianId)
+        .eq('institution_id', institutionId);
 
       if (updateError) throw updateError;
 
@@ -796,19 +823,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Institution admin must be assigned to an institution" });
       }
 
-      // Verify the clinician belongs to this institution
+      // SECURITY: Verify the clinician belongs to this institution before rejecting
       const { data: clinician, error: fetchError } = await supabase
         .from('users')
-        .select('id, institution_id')
+        .select('id, institution_id, role, approval_status')
         .eq('id', clinicianId)
         .eq('role', 'clinician')
+        .eq('institution_id', institutionId)
         .single();
 
       if (fetchError || !clinician) {
-        return res.status(404).json({ error: "Clinician not found" });
+        return res.status(404).json({ error: "Clinician not found or not in your institution" });
       }
 
+      // Double-check institution ownership (defense in depth)
       if (clinician.institution_id !== institutionId) {
+        console.error(`SECURITY VIOLATION: Admin ${req.user!.id} attempted to reject clinician ${clinicianId} from different institution`);
         return res.status(403).json({ error: "Cannot reject clinicians from other institutions" });
       }
 
@@ -816,7 +846,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { error: updateError } = await supabase
         .from('users')
         .update({ approval_status: 'rejected' })
-        .eq('id', clinicianId);
+        .eq('id', clinicianId)
+        .eq('institution_id', institutionId);
 
       if (updateError) throw updateError;
 
