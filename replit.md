@@ -10,6 +10,13 @@ The current implementation is a **web-based clinician dashboard** built with Rea
 
 Preferred communication style: Simple, everyday language.
 
+## Project Structure
+
+The VeriHealth platform consists of two separate web applications:
+
+1. **Clinician Dashboard** (`/client`, `/server`) - Authenticated portal for healthcare providers
+2. **Public Website** (`/public-site`) - Marketing site for general visitors
+
 ## System Architecture
 
 ### Frontend Architecture
