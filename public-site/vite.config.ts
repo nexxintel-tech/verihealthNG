@@ -12,11 +12,8 @@ export default defineConfig({
   server: {
     port: 5001,
     host: '0.0.0.0',
-    allowedHosts: [
-      '.replit.dev',
-      '.repl.co',
-      'localhost',
-    ],
+    // Allow all hosts for Replit's dynamic preview URLs
+    allowedHosts: 'all',
   },
   build: {
     outDir: 'dist',
