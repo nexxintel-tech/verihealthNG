@@ -90,23 +90,23 @@ export default function HeroSlider() {
               alt={slide.title}
               className="w-full h-full object-cover"
             />
-            {/* Overlay Gradient */}
-            <div className="absolute inset-0 bg-gradient-to-r from-medical-blue-900/90 via-medical-blue-800/70 to-medical-blue-600/50"></div>
+            {/* Overlay Gradient - Darker for better button contrast */}
+            <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-medical-blue-900/75 to-medical-blue-700/60"></div>
           </div>
 
           {/* Content */}
           <div className="relative h-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center">
             <div className="max-w-3xl text-white">
-              <h1 className="text-4xl lg:text-6xl font-heading font-bold mb-6 text-balance animate-fade-in">
+              <h1 className="text-4xl lg:text-6xl font-heading font-bold mb-6 text-balance animate-fade-in drop-shadow-lg">
                 {slide.title}
               </h1>
-              <p className="text-xl lg:text-2xl text-blue-100 mb-8 text-balance animate-fade-in-delay">
+              <p className="text-xl lg:text-2xl text-blue-100 mb-8 text-balance animate-fade-in-delay drop-shadow-md">
                 {slide.subtitle}
               </p>
               <div className="flex flex-col sm:flex-row gap-4 animate-fade-in-delay-2">
                 <Link href="/contact">
                   <button
-                    className="px-8 py-4 bg-white text-medical-blue-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors inline-flex items-center justify-center gap-2"
+                    className="px-8 py-4 bg-white text-medical-blue-700 rounded-lg font-semibold hover:bg-blue-50 hover:scale-105 transition-all shadow-2xl hover:shadow-blue-500/50 inline-flex items-center justify-center gap-2"
                     data-testid="button-request-demo"
                   >
                     Request Demo
@@ -115,7 +115,7 @@ export default function HeroSlider() {
                 </Link>
                 <Link href="/shop">
                   <button
-                    className="px-8 py-4 bg-transparent border-2 border-white text-white rounded-lg font-semibold hover:bg-white/10 transition-colors"
+                    className="px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white text-white rounded-lg font-semibold hover:bg-white/20 hover:scale-105 transition-all shadow-xl inline-flex items-center justify-center gap-2"
                     data-testid="button-view-products"
                   >
                     View Products
