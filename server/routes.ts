@@ -27,6 +27,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const { email, password, role = 'patient' } = req.body;
+
+      // Validate inputs
+      if (!email || !password) {
+        return res.status(400).json({ error: "Email and password are required" });
+      }
+
+      if (!['patient', 'clinician', 'admin'].includes(role)) {
+        return res.status(400).json({ error: "Invalid role. Must be patient, clinician, or admin" });
+      }
+
+      // Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (authError) throw authError;
+
+      if (!authData.user) {
+        return res.status(500).json({ error: "Failed to create user" });
+      }
+
+      // Create user record in users table
+      const { error: userError } = await supabase
+        .from('users')
+        .insert({
+          id: authData.user.id,
+          email: authData.user.email!,
+          role: role,
+        });
+
+      if (userError) {
+        // If user table insert fails, try to delete the auth user
+        await supabase.auth.admin.deleteUser(authData.user.id);
+        throw userError;
+      }
+
+      res.json({
+        user: authData.user,
+        session: authData.session,
+        message: "Registration successful"
+      });
+    } catch (error: any) {
+      console.error("Registration error:", error);
+      res.status(400).json({ error: error.message || "Registration failed" });
+    }
+  });
+
   app.post("/api/auth/logout", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
@@ -40,6 +91,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Logout error:", error);
       res.status(500).json({ error: "Logout failed" });
+    }
+  });
+
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${process.env.VITE_DASHBOARD_URL || 'http://localhost:5000'}/reset-password`,
+      });
+
+      if (error) throw error;
+
+      res.json({ message: "Password reset email sent successfully" });
+    } catch (error: any) {
+      console.error("Forgot password error:", error);
+      res.status(500).json({ error: error.message || "Failed to send password reset email" });
+    }
+  });
+
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { password } = req.body;
+      const authHeader = req.headers.authorization;
+      const token = authHeader?.substring(7);
+
+      if (!token) {
+        return res.status(401).json({ error: "Missing authorization token" });
+      }
+
+      if (!password) {
+        return res.status(400).json({ error: "Password is required" });
+      }
+
+      const { error } = await supabase.auth.updateUser({
+        password: password
+      });
+
+      if (error) throw error;
+
+      res.json({ message: "Password reset successfully" });
+    } catch (error: any) {
+      console.error("Reset password error:", error);
+      res.status(500).json({ error: error.message || "Failed to reset password" });
     }
   });
 
