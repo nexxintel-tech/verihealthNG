@@ -28,6 +28,8 @@ export const users = pgTable("users", {
 export const patients = pgTable("patients", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id),
+  assignedClinicianId: varchar("assigned_clinician_id").references(() => users.id),
+  institutionId: varchar("institution_id").references(() => institutions.id),
   name: text("name").notNull(),
   age: integer("age").notNull(),
   gender: text("gender").notNull(),
