@@ -37,9 +37,11 @@ export default function Layout({ children }: LayoutProps) {
   const { toast } = useToast();
   const user = getUser();
 
+  const isPatient = user?.role === 'patient';
+  
   const navItems = [
     { href: "/", icon: LayoutDashboard, label: "Dashboard", roles: ['patient', 'clinician', 'admin', 'institution_admin'] },
-    { href: "/patients", icon: Users, label: "Patients", roles: ['patient', 'clinician', 'admin', 'institution_admin'] },
+    { href: "/patients", icon: Users, label: isPatient ? "My Profile" : "Patients", roles: ['patient', 'clinician', 'admin', 'institution_admin'] },
     { href: "/alerts", icon: Bell, label: "Alerts", roles: ['clinician', 'admin', 'institution_admin'] },
     { href: "/admin/clinician-approvals", icon: UserCheck, label: "Clinician Approvals", roles: ['institution_admin'] },
     { href: "/settings", icon: Settings, label: "Settings", roles: ['patient', 'clinician', 'admin', 'institution_admin'] },

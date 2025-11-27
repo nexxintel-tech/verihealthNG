@@ -47,10 +47,16 @@ export default function PatientList() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-heading font-bold tracking-tight">Patients</h1>
-            <p className="text-muted-foreground">Manage and monitor your patient cohort.</p>
+            <h1 className="text-3xl font-heading font-bold tracking-tight">
+              {isClinicianOrAdmin ? "Patients" : "My Profile"}
+            </h1>
+            <p className="text-muted-foreground">
+              {isClinicianOrAdmin ? "Manage and monitor your patient cohort." : "View your health profile."}
+            </p>
           </div>
-          <Button className="bg-primary hover:bg-primary/90">Add New Patient</Button>
+          {isClinicianOrAdmin && (
+            <Button className="bg-primary hover:bg-primary/90">Add New Patient</Button>
+          )}
         </div>
 
         <Card className="border-none shadow-md">
@@ -155,8 +161,12 @@ export default function PatientList() {
                               <DropdownMenuItem asChild>
                                 <Link href={`/patients/${patient.id}`}>View Details</Link>
                               </DropdownMenuItem>
-                              <DropdownMenuItem>Edit Profile</DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive">Discharge</DropdownMenuItem>
+                              {isClinicianOrAdmin && (
+                                <>
+                                  <DropdownMenuItem>Edit Profile</DropdownMenuItem>
+                                  <DropdownMenuItem className="text-destructive">Discharge</DropdownMenuItem>
+                                </>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
