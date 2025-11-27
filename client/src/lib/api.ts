@@ -520,3 +520,278 @@ export async function updateUserRole(
     throw new Error(error.error || "Failed to update user role");
   }
 }
+
+// Create institution (admin only)
+export async function createInstitution(data: {
+  name: string;
+  address?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+}): Promise<AdminInstitution> {
+  const response = await fetch("/api/admin/institutions", {
+    method: "POST",
+    headers: {
+      ...getAuthHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to create institution");
+  }
+  
+  return response.json();
+}
+
+// Update institution (admin only)
+export async function updateInstitution(
+  id: string,
+  data: {
+    name?: string;
+    address?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    isDefault?: boolean;
+  }
+): Promise<AdminInstitution> {
+  const response = await fetch(`/api/admin/institutions/${id}`, {
+    method: "PATCH",
+    headers: {
+      ...getAuthHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to update institution");
+  }
+  
+  return response.json();
+}
+
+// Delete institution (admin only)
+export async function deleteInstitution(id: string): Promise<void> {
+  const response = await fetch(`/api/admin/institutions/${id}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to delete institution");
+  }
+}
+
+// Toggle user status (enable/disable)
+export async function toggleUserStatus(userId: string, isActive: boolean): Promise<void> {
+  const response = await fetch(`/api/admin/users/${userId}/status`, {
+    method: "PATCH",
+    headers: {
+      ...getAuthHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ isActive }),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to update user status");
+  }
+}
+
+// Bulk update users
+export async function bulkUpdateUsers(
+  userIds: string[],
+  action: 'disable' | 'enable' | 'change_role',
+  role?: string,
+  institutionId?: string
+): Promise<{ count: number }> {
+  const response = await fetch("/api/admin/users/bulk-update", {
+    method: "POST",
+    headers: {
+      ...getAuthHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ userIds, action, role, institutionId }),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to perform bulk update");
+  }
+  
+  return response.json();
+}
+
+// Activity log types
+export interface ActivityLog {
+  id: string;
+  user_id: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  details: string | null;
+  ip_address: string | null;
+  created_at: string;
+  users?: { email: string } | null;
+}
+
+// Fetch activity logs
+export async function fetchActivityLogs(
+  page: number = 1,
+  limit: number = 50
+): Promise<{ logs: ActivityLog[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> {
+  const response = await fetch(`/api/admin/activity-logs?page=${page}&limit=${limit}`, {
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    throw new Error("Failed to fetch activity logs");
+  }
+  
+  return response.json();
+}
+
+// User details types
+export interface UserDetails extends AdminUser {
+  profile?: {
+    full_name: string;
+    license_number?: string;
+    specialty?: string;
+    phone?: string;
+  };
+  institution?: AdminInstitution;
+  patientCount: number;
+  lastSignIn: string | null;
+  isBanned: boolean;
+}
+
+// Fetch user details
+export async function fetchUserDetails(userId: string): Promise<UserDetails> {
+  const response = await fetch(`/api/admin/users/${userId}`, {
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    throw new Error("Failed to fetch user details");
+  }
+  
+  return response.json();
+}
+
+// Send email to user
+export async function sendEmailToUser(userId: string, subject: string, message: string): Promise<void> {
+  const response = await fetch(`/api/admin/users/${userId}/email`, {
+    method: "POST",
+    headers: {
+      ...getAuthHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ subject, message }),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to send email");
+  }
+}
+
+// User invite types
+export interface UserInvite {
+  id: string;
+  email: string;
+  role: string;
+  institution_id: string | null;
+  status: string;
+  expires_at: string;
+  created_at: string;
+  inviter?: { email: string };
+  institution?: { name: string };
+}
+
+// Create user invite
+export async function createUserInvite(data: {
+  email: string;
+  role?: string;
+  institutionId?: string;
+}): Promise<UserInvite> {
+  const response = await fetch("/api/admin/invites", {
+    method: "POST",
+    headers: {
+      ...getAuthHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to create invite");
+  }
+  
+  return response.json();
+}
+
+// Fetch user invites
+export async function fetchUserInvites(): Promise<UserInvite[]> {
+  const response = await fetch("/api/admin/invites", {
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    throw new Error("Failed to fetch invites");
+  }
+  
+  return response.json();
+}
+
+// Delete user invite
+export async function deleteUserInvite(id: string): Promise<void> {
+  const response = await fetch(`/api/admin/invites/${id}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    throw new Error("Failed to cancel invite");
+  }
+}
+
+// Analytics types
+export interface AdminAnalytics {
+  totalUsers: number;
+  roleCounts: Record<string, number>;
+  usersByMonth: { month: string; count: number }[];
+  institutionCount: number;
+  activityByDay: { date: string; count: number }[];
+}
+
+// Fetch admin analytics
+export async function fetchAdminAnalytics(): Promise<AdminAnalytics> {
+  const response = await fetch("/api/admin/analytics", {
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    throw new Error("Failed to fetch analytics");
+  }
+  
+  return response.json();
+}
+
+// Export users to CSV
+export async function exportUsersCSV(): Promise<Blob> {
+  const response = await fetch("/api/admin/users/export", {
+    headers: getAuthHeaders(),
+  });
+  
+  if (!response.ok) {
+    throw new Error("Failed to export users");
+  }
+  
+  return response.blob();
+}

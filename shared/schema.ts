@@ -93,6 +93,31 @@ export const clinicianProfiles = pgTable("clinician_profiles", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Activity logs table for admin audit trail
+export const activityLogs = pgTable("activity_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  action: text("action").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: varchar("target_id"),
+  details: text("details"),
+  ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// User invites table
+export const userInvites = pgTable("user_invites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull(),
+  role: text("role").notNull().default("patient"),
+  institutionId: varchar("institution_id").references(() => institutions.id),
+  invitedById: varchar("invited_by_id").references(() => users.id),
+  token: text("token").notNull().unique(),
+  status: text("status").notNull().default("pending"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertPatientSchema = createInsertSchema(patients).omit({
   id: true,
@@ -119,6 +144,16 @@ export const insertClinicianProfileSchema = createInsertSchema(clinicianProfiles
   createdAt: true,
 });
 
+export const insertActivityLogSchema = createInsertSchema(activityLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertUserInviteSchema = createInsertSchema(userInvites).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type Patient = typeof patients.$inferSelect;
@@ -134,3 +169,7 @@ export type InsertVitalReading = z.infer<typeof insertVitalReadingSchema>;
 export type InsertAlert = z.infer<typeof insertAlertSchema>;
 export type InsertInstitution = z.infer<typeof insertInstitutionSchema>;
 export type InsertClinicianProfile = z.infer<typeof insertClinicianProfileSchema>;
+export type ActivityLog = typeof activityLogs.$inferSelect;
+export type UserInvite = typeof userInvites.$inferSelect;
+export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
+export type InsertUserInvite = z.infer<typeof insertUserInviteSchema>;

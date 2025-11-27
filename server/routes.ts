@@ -1141,6 +1141,627 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create institution (admin only)
+  app.post("/api/admin/institutions", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { name, address, contactEmail, contactPhone } = req.body;
+
+      if (!name) {
+        return res.status(400).json({ error: "Institution name is required" });
+      }
+
+      const { data, error } = await supabase
+        .from('institutions')
+        .insert({
+          name,
+          address: address || null,
+          contact_email: contactEmail || null,
+          contact_phone: contactPhone || null,
+          is_default: false,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Log activity
+      await supabase.from('activity_logs').insert({
+        user_id: req.user!.id,
+        action: 'create',
+        target_type: 'institution',
+        target_id: data.id,
+        details: `Created institution: ${name}`,
+        ip_address: req.ip,
+      });
+
+      res.json(data);
+    } catch (error) {
+      console.error("Error creating institution:", error);
+      res.status(500).json({ error: "Failed to create institution" });
+    }
+  });
+
+  // Update institution (admin only)
+  app.patch("/api/admin/institutions/:id", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, address, contactEmail, contactPhone, isDefault } = req.body;
+
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (address !== undefined) updateData.address = address;
+      if (contactEmail !== undefined) updateData.contact_email = contactEmail;
+      if (contactPhone !== undefined) updateData.contact_phone = contactPhone;
+      if (isDefault !== undefined) updateData.is_default = isDefault;
+
+      // If setting as default, unset other defaults first
+      if (isDefault === true) {
+        await supabase
+          .from('institutions')
+          .update({ is_default: false })
+          .neq('id', id);
+      }
+
+      const { data, error } = await supabase
+        .from('institutions')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Log activity
+      await supabase.from('activity_logs').insert({
+        user_id: req.user!.id,
+        action: 'update',
+        target_type: 'institution',
+        target_id: id,
+        details: `Updated institution: ${data.name}`,
+        ip_address: req.ip,
+      });
+
+      res.json(data);
+    } catch (error) {
+      console.error("Error updating institution:", error);
+      res.status(500).json({ error: "Failed to update institution" });
+    }
+  });
+
+  // Delete institution (admin only)
+  app.delete("/api/admin/institutions/:id", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Check if institution has users
+      const { data: usersInInst } = await supabase
+        .from('users')
+        .select('id')
+        .eq('institution_id', id)
+        .limit(1);
+
+      if (usersInInst && usersInInst.length > 0) {
+        return res.status(400).json({ error: "Cannot delete institution with assigned users" });
+      }
+
+      // Get institution name for logging
+      const { data: inst } = await supabase
+        .from('institutions')
+        .select('name')
+        .eq('id', id)
+        .single();
+
+      const { error } = await supabase
+        .from('institutions')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Log activity
+      await supabase.from('activity_logs').insert({
+        user_id: req.user!.id,
+        action: 'delete',
+        target_type: 'institution',
+        target_id: id,
+        details: `Deleted institution: ${inst?.name || id}`,
+        ip_address: req.ip,
+      });
+
+      res.json({ message: "Institution deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting institution:", error);
+      res.status(500).json({ error: "Failed to delete institution" });
+    }
+  });
+
+  // Disable/Enable user (admin only)
+  app.patch("/api/admin/users/:id/status", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { isActive } = req.body;
+      const adminId = req.user!.id;
+
+      if (id === adminId) {
+        return res.status(400).json({ error: "Cannot disable your own account" });
+      }
+
+      // Update user in Supabase Auth (ban/unban)
+      const { data: authData, error: authError } = await supabase.auth.admin.updateUserById(
+        id,
+        { ban_duration: isActive ? 'none' : '876000h' } // Ban for 100 years if disabling
+      );
+
+      if (authError) throw authError;
+
+      // Log activity
+      await supabase.from('activity_logs').insert({
+        user_id: req.user!.id,
+        action: isActive ? 'enable' : 'disable',
+        target_type: 'user',
+        target_id: id,
+        details: `${isActive ? 'Enabled' : 'Disabled'} user account`,
+        ip_address: req.ip,
+      });
+
+      res.json({ message: `User ${isActive ? 'enabled' : 'disabled'} successfully` });
+    } catch (error) {
+      console.error("Error updating user status:", error);
+      res.status(500).json({ error: "Failed to update user status" });
+    }
+  });
+
+  // Bulk update user roles (admin only)
+  app.post("/api/admin/users/bulk-update", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { userIds, action, role, institutionId } = req.body;
+      const adminId = req.user!.id;
+
+      if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+        return res.status(400).json({ error: "User IDs are required" });
+      }
+
+      // Filter out admin's own ID
+      const filteredIds = userIds.filter(id => id !== adminId);
+
+      if (action === 'disable') {
+        for (const userId of filteredIds) {
+          await supabase.auth.admin.updateUserById(userId, { ban_duration: '876000h' });
+        }
+        await supabase.from('activity_logs').insert({
+          user_id: adminId,
+          action: 'bulk_disable',
+          target_type: 'user',
+          details: `Disabled ${filteredIds.length} users`,
+          ip_address: req.ip,
+        });
+      } else if (action === 'enable') {
+        for (const userId of filteredIds) {
+          await supabase.auth.admin.updateUserById(userId, { ban_duration: 'none' });
+        }
+        await supabase.from('activity_logs').insert({
+          user_id: adminId,
+          action: 'bulk_enable',
+          target_type: 'user',
+          details: `Enabled ${filteredIds.length} users`,
+          ip_address: req.ip,
+        });
+      } else if (action === 'change_role' && role) {
+        const updateData: any = { role };
+        if (role === 'institution_admin' || role === 'clinician') {
+          if (!institutionId) {
+            return res.status(400).json({ error: "Institution is required for this role" });
+          }
+          updateData.institution_id = institutionId;
+          if (role === 'institution_admin') {
+            updateData.approval_status = 'approved';
+          }
+        } else {
+          updateData.institution_id = null;
+          updateData.approval_status = null;
+        }
+
+        await supabase
+          .from('users')
+          .update(updateData)
+          .in('id', filteredIds);
+
+        await supabase.from('activity_logs').insert({
+          user_id: adminId,
+          action: 'bulk_role_change',
+          target_type: 'user',
+          details: `Changed ${filteredIds.length} users to role: ${role}`,
+          ip_address: req.ip,
+        });
+      }
+
+      res.json({ message: "Bulk update completed successfully", count: filteredIds.length });
+    } catch (error) {
+      console.error("Error in bulk update:", error);
+      res.status(500).json({ error: "Failed to perform bulk update" });
+    }
+  });
+
+  // Get activity logs (admin only)
+  app.get("/api/admin/activity-logs", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { page = '1', limit = '50', action, targetType } = req.query;
+      const pageNum = parseInt(page as string);
+      const limitNum = parseInt(limit as string);
+      const offset = (pageNum - 1) * limitNum;
+
+      let query = supabase
+        .from('activity_logs')
+        .select('*, users:user_id(email)', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limitNum - 1);
+
+      if (action) query = query.eq('action', action);
+      if (targetType) query = query.eq('target_type', targetType);
+
+      const { data: logs, error, count } = await query;
+
+      if (error) throw error;
+
+      res.json({
+        logs: logs || [],
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limitNum),
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching activity logs:", error);
+      res.status(500).json({ error: "Failed to fetch activity logs" });
+    }
+  });
+
+  // Get user details (admin only)
+  app.get("/api/admin/users/:id", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (userError || !user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Get clinician profile if exists
+      const { data: profile } = await supabase
+        .from('clinician_profiles')
+        .select('*')
+        .eq('user_id', id)
+        .single();
+
+      // Get institution
+      let institution = null;
+      if (user.institution_id) {
+        const { data: inst } = await supabase
+          .from('institutions')
+          .select('*')
+          .eq('id', user.institution_id)
+          .single();
+        institution = inst;
+      }
+
+      // Get patient count if clinician
+      let patientCount = 0;
+      if (user.role === 'clinician') {
+        const { count } = await supabase
+          .from('patients')
+          .select('id', { count: 'exact', head: true })
+          .eq('assigned_clinician_id', id);
+        patientCount = count || 0;
+      }
+
+      // Get auth user info for last sign in
+      const { data: authData } = await supabase.auth.admin.getUserById(id);
+
+      const authUser = authData?.user as any;
+      res.json({
+        ...user,
+        profile,
+        institution,
+        patientCount,
+        lastSignIn: authUser?.last_sign_in_at,
+        isBanned: authUser?.banned_until ? new Date(authUser.banned_until) > new Date() : false,
+      });
+    } catch (error) {
+      console.error("Error fetching user details:", error);
+      res.status(500).json({ error: "Failed to fetch user details" });
+    }
+  });
+
+  // Send email to user (admin only)
+  app.post("/api/admin/users/:id/email", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { subject, message } = req.body;
+
+      if (!subject || !message) {
+        return res.status(400).json({ error: "Subject and message are required" });
+      }
+
+      // Get user email
+      const { data: user } = await supabase
+        .from('users')
+        .select('email')
+        .eq('id', id)
+        .single();
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      await sendEmail({
+        to: user.email,
+        subject,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">Message from VeriHealth Admin</h2>
+            <div style="padding: 20px; background: #f5f5f5; border-radius: 8px;">
+              ${message.replace(/\n/g, '<br>')}
+            </div>
+            <p style="color: #666; font-size: 12px; margin-top: 20px;">
+              This message was sent from the VeriHealth administration team.
+            </p>
+          </div>
+        `,
+      });
+
+      // Log activity
+      await supabase.from('activity_logs').insert({
+        user_id: req.user!.id,
+        action: 'email_sent',
+        target_type: 'user',
+        target_id: id,
+        details: `Sent email: ${subject}`,
+        ip_address: req.ip,
+      });
+
+      res.json({ message: "Email sent successfully" });
+    } catch (error) {
+      console.error("Error sending email:", error);
+      res.status(500).json({ error: "Failed to send email" });
+    }
+  });
+
+  // Create user invite (admin only)
+  app.post("/api/admin/invites", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { email, role, institutionId } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      // Check if user already exists
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .single();
+
+      if (existingUser) {
+        return res.status(400).json({ error: "User with this email already exists" });
+      }
+
+      // Generate token
+      const token = require('crypto').randomBytes(32).toString('hex');
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiry
+
+      const { data, error } = await supabase
+        .from('user_invites')
+        .insert({
+          email,
+          role: role || 'patient',
+          institution_id: institutionId || null,
+          invited_by_id: req.user!.id,
+          token,
+          status: 'pending',
+          expires_at: expiresAt.toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Send invite email
+      const inviteUrl = `${process.env.VITE_DASHBOARD_URL || 'http://localhost:5000'}/register?invite=${token}`;
+      await sendEmail({
+        to: email,
+        subject: 'You\'ve been invited to VeriHealth',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">You're Invited to VeriHealth</h2>
+            <p>You've been invited to join VeriHealth as a <strong>${role || 'patient'}</strong>.</p>
+            <p>Click the button below to create your account:</p>
+            <a href="${inviteUrl}" style="display: inline-block; padding: 12px 24px; background: #0066cc; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+              Accept Invitation
+            </a>
+            <p style="color: #666; font-size: 12px;">
+              This invitation expires in 7 days.
+            </p>
+          </div>
+        `,
+      });
+
+      // Log activity
+      await supabase.from('activity_logs').insert({
+        user_id: req.user!.id,
+        action: 'invite_sent',
+        target_type: 'invite',
+        target_id: data.id,
+        details: `Sent invite to ${email} as ${role || 'patient'}`,
+        ip_address: req.ip,
+      });
+
+      res.json(data);
+    } catch (error) {
+      console.error("Error creating invite:", error);
+      res.status(500).json({ error: "Failed to create invite" });
+    }
+  });
+
+  // Get all invites (admin only)
+  app.get("/api/admin/invites", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { data: invites, error } = await supabase
+        .from('user_invites')
+        .select('*, inviter:invited_by_id(email), institution:institution_id(name)')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      res.json(invites || []);
+    } catch (error) {
+      console.error("Error fetching invites:", error);
+      res.status(500).json({ error: "Failed to fetch invites" });
+    }
+  });
+
+  // Delete/cancel invite (admin only)
+  app.delete("/api/admin/invites/:id", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const { error } = await supabase
+        .from('user_invites')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      res.json({ message: "Invite cancelled successfully" });
+    } catch (error) {
+      console.error("Error cancelling invite:", error);
+      res.status(500).json({ error: "Failed to cancel invite" });
+    }
+  });
+
+  // Get admin analytics (admin only)
+  app.get("/api/admin/analytics", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      // Get user counts by role
+      const { data: users } = await supabase
+        .from('users')
+        .select('role, created_at');
+
+      const roleCounts: Record<string, number> = {};
+      const usersByMonth: Record<string, number> = {};
+      
+      users?.forEach(u => {
+        roleCounts[u.role] = (roleCounts[u.role] || 0) + 1;
+        const month = new Date(u.created_at).toISOString().slice(0, 7);
+        usersByMonth[month] = (usersByMonth[month] || 0) + 1;
+      });
+
+      // Get institution stats
+      const { data: institutions, count: institutionCount } = await supabase
+        .from('institutions')
+        .select('id, name', { count: 'exact' });
+
+      // Get users per institution
+      const usersPerInstitution: Record<string, number> = {};
+      users?.forEach(u => {
+        if ((u as any).institution_id) {
+          usersPerInstitution[(u as any).institution_id] = (usersPerInstitution[(u as any).institution_id] || 0) + 1;
+        }
+      });
+
+      // Get recent activity
+      const { data: recentActivity } = await supabase
+        .from('activity_logs')
+        .select('action, created_at')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      const activityByDay: Record<string, number> = {};
+      recentActivity?.forEach(a => {
+        const day = new Date(a.created_at).toISOString().slice(0, 10);
+        activityByDay[day] = (activityByDay[day] || 0) + 1;
+      });
+
+      res.json({
+        totalUsers: users?.length || 0,
+        roleCounts,
+        usersByMonth: Object.entries(usersByMonth)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .slice(-12)
+          .map(([month, count]) => ({ month, count })),
+        institutionCount: institutionCount || 0,
+        activityByDay: Object.entries(activityByDay)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .slice(-30)
+          .map(([date, count]) => ({ date, count })),
+      });
+    } catch (error) {
+      console.error("Error fetching analytics:", error);
+      res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
+  // Export users to CSV (admin only)
+  app.get("/api/admin/users/export", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('id, email, role, institution_id, approval_status, created_at')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Get institution names
+      const { data: institutions } = await supabase
+        .from('institutions')
+        .select('id, name');
+
+      const institutionMap = institutions?.reduce((acc, inst) => {
+        acc[inst.id] = inst.name;
+        return acc;
+      }, {} as Record<string, string>) || {};
+
+      // Get clinician profiles
+      const { data: profiles } = await supabase
+        .from('clinician_profiles')
+        .select('user_id, full_name');
+
+      const profileMap = profiles?.reduce((acc, p) => {
+        acc[p.user_id] = p.full_name;
+        return acc;
+      }, {} as Record<string, string>) || {};
+
+      // Create CSV
+      const csvRows = [
+        ['ID', 'Email', 'Name', 'Role', 'Institution', 'Status', 'Created At'].join(','),
+        ...(users || []).map(u => [
+          u.id,
+          u.email,
+          profileMap[u.id] || u.email.split('@')[0],
+          u.role,
+          u.institution_id ? institutionMap[u.institution_id] : '',
+          u.approval_status || '',
+          u.created_at,
+        ].map(v => `"${v || ''}"`).join(',')),
+      ];
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=users-export.csv');
+      res.send(csvRows.join('\n'));
+    } catch (error) {
+      console.error("Error exporting users:", error);
+      res.status(500).json({ error: "Failed to export users" });
+    }
+  });
+
   // Get top performing clinicians (for dashboard widget)
   // Shows top performers within the user's institution only
   app.get("/api/clinicians/top-performers", authenticateUser, async (req, res) => {
