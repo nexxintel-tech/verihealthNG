@@ -1256,6 +1256,163 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get patient's own dashboard data (for patient role)
+  // Returns: their profile, vitals summary, risk score, conditions, assigned clinician, institution
+  app.get("/api/patient/my-dashboard", authenticateUser, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const userRole = req.user!.role;
+
+      // Only patients can access this endpoint
+      if (userRole !== 'patient') {
+        return res.status(403).json({ error: "This endpoint is for patients only" });
+      }
+
+      // Get the patient record for this user
+      const { data: patient, error: patientError } = await supabase
+        .from("patients")
+        .select("*")
+        .eq("user_id", userId)
+        .single();
+
+      if (patientError || !patient) {
+        return res.status(404).json({ error: "Patient profile not found" });
+      }
+
+      // Get conditions
+      const { data: conditions } = await supabase
+        .from("conditions")
+        .select("name")
+        .eq("patient_id", patient.id);
+
+      // Get latest risk score
+      const { data: riskScores } = await supabase
+        .from("risk_scores")
+        .select("score, risk_level, last_sync")
+        .eq("patient_id", patient.id)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+
+      const riskScore = riskScores?.[0];
+
+      // Get recent vitals (last 7 days)
+      const { data: rawVitals } = await supabase
+        .from("vital_readings")
+        .select("*")
+        .eq("patient_id", patient.id)
+        .gte("timestamp", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+        .order("timestamp", { ascending: false });
+
+      // Transform vitals to camelCase for frontend
+      const transformVital = (v: any) => ({
+        id: v.id,
+        patientId: v.patient_id,
+        type: v.type,
+        value: v.value,
+        unit: v.unit,
+        timestamp: v.timestamp,
+        status: v.status,
+      });
+
+      const recentVitals = rawVitals?.map(transformVital) || [];
+
+      // Get vital summaries (latest of each type)
+      const vitalsByType: Record<string, any> = {};
+      recentVitals.forEach(v => {
+        if (!vitalsByType[v.type]) {
+          vitalsByType[v.type] = v;
+        }
+      });
+
+      // Get assigned clinician info
+      let clinicianInfo = null;
+      if (patient.assigned_clinician_id) {
+        const { data: clinician } = await supabase
+          .from("users")
+          .select("id, email")
+          .eq("id", patient.assigned_clinician_id)
+          .single();
+
+        if (clinician) {
+          // Get clinician profile
+          const { data: profile } = await supabase
+            .from("clinician_profiles")
+            .select("full_name, specialty, phone")
+            .eq("user_id", clinician.id)
+            .single();
+
+          clinicianInfo = {
+            id: clinician.id,
+            email: clinician.email,
+            name: profile?.full_name || clinician.email.split('@')[0],
+            specialty: profile?.specialty || 'General Practice',
+            phone: profile?.phone || null,
+          };
+        }
+      }
+
+      // Get institution info
+      let institutionInfo = null;
+      if (patient.institution_id) {
+        const { data: institution } = await supabase
+          .from("institutions")
+          .select("id, name, address, contact_email, contact_phone")
+          .eq("id", patient.institution_id)
+          .single();
+
+        if (institution) {
+          institutionInfo = {
+            id: institution.id,
+            name: institution.name,
+            address: institution.address,
+            contactEmail: institution.contact_email,
+            contactPhone: institution.contact_phone,
+          };
+        }
+      }
+
+      // Get recent alerts for this patient
+      const { data: rawAlerts } = await supabase
+        .from("alerts")
+        .select("id, type, message, severity, is_read, timestamp")
+        .eq("patient_id", patient.id)
+        .order("timestamp", { ascending: false })
+        .limit(5);
+
+      // Transform alerts to camelCase
+      const recentAlerts = rawAlerts?.map(a => ({
+        id: a.id,
+        type: a.type,
+        message: a.message,
+        severity: a.severity,
+        isRead: a.is_read,
+        timestamp: a.timestamp,
+      })) || [];
+
+      res.json({
+        patient: {
+          id: patient.id,
+          name: patient.name,
+          age: patient.age,
+          gender: patient.gender,
+          status: patient.status,
+          conditions: conditions?.map(c => c.name) || [],
+          riskScore: riskScore?.score || 0,
+          riskLevel: riskScore?.risk_level || "low",
+          lastSync: riskScore?.last_sync || patient.created_at,
+        },
+        latestVitals: vitalsByType,
+        recentVitals: recentVitals,
+        clinician: clinicianInfo,
+        institution: institutionInfo,
+        recentAlerts: recentAlerts,
+      });
+    } catch (error) {
+      console.error("Error fetching patient dashboard:", error);
+      res.status(500).json({ error: "Failed to fetch patient dashboard" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

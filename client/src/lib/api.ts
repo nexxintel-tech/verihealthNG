@@ -184,6 +184,81 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
   return response.json();
 }
 
+// Patient dashboard vital type (camelCase from transformed API)
+export interface PatientVital {
+  id: string;
+  patientId: string;
+  type: string;
+  value: number;
+  unit: string;
+  timestamp: string;
+  status: "normal" | "warning" | "critical";
+}
+
+// Patient dashboard data types
+export interface PatientDashboardData {
+  patient: {
+    id: string;
+    name: string;
+    age: number;
+    gender: string;
+    status: string;
+    conditions: string[];
+    riskScore: number;
+    riskLevel: "low" | "medium" | "high";
+    lastSync: string;
+  };
+  latestVitals: Record<string, PatientVital>;
+  recentVitals: PatientVital[];
+  clinician: {
+    id: string;
+    email: string;
+    name: string;
+    specialty: string;
+    phone: string | null;
+  } | null;
+  institution: {
+    id: string;
+    name: string;
+    address: string | null;
+    contactEmail: string | null;
+    contactPhone: string | null;
+  } | null;
+  recentAlerts: {
+    id: string;
+    type: string;
+    message: string;
+    severity: string;
+    isRead: boolean;
+    timestamp: string;
+  }[];
+}
+
+// Fetch patient's own dashboard data (for patient role)
+export async function fetchPatientDashboard(): Promise<PatientDashboardData> {
+  const response = await fetch("/api/patient/my-dashboard", {
+    headers: getAuthHeaders(),
+  });
+  
+  if (response.status === 401) {
+    throw new Error("Unauthorized - please log in again");
+  }
+  
+  if (response.status === 403) {
+    throw new Error("Access denied - patients only");
+  }
+  
+  if (response.status === 404) {
+    throw new Error("Patient profile not found");
+  }
+  
+  if (!response.ok) {
+    throw new Error("Failed to fetch patient dashboard");
+  }
+  
+  return response.json();
+}
+
 // Institution types and functions
 export interface Institution {
   id: string;
