@@ -18,6 +18,7 @@ import Alerts from "@/pages/Alerts";
 import Settings from "@/pages/Settings";
 import { ClinicianRegister } from "@/pages/ClinicianRegister";
 import { ClinicianApprovals } from "@/pages/ClinicianApprovals";
+import { AdminPanel } from "@/pages/AdminPanel";
 
 function Router() {
   // Enable realtime updates
@@ -54,6 +55,11 @@ function Router() {
       <Route path="/admin/clinician-approvals">
         <ProtectedRoute>
           <ClinicianApprovals />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/admin/users">
+        <ProtectedRoute>
+          <AdminPanel />
         </ProtectedRoute>
       </Route>
       <Route path="/settings">

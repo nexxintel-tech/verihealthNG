@@ -426,3 +426,97 @@ export async function respondToAlert(alertId: string): Promise<Alert> {
   
   return response.json();
 }
+
+// ============================================================
+// SUPER ADMIN API
+// ============================================================
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  role: 'patient' | 'clinician' | 'admin' | 'institution_admin';
+  institutionId: string | null;
+  institutionName: string | null;
+  approvalStatus: string | null;
+  createdAt: string;
+}
+
+export interface AdminInstitution {
+  id: string;
+  name: string;
+  address: string;
+  contact_email: string;
+  is_default: boolean;
+}
+
+// Fetch all users (admin only)
+export async function fetchAdminUsers(): Promise<AdminUser[]> {
+  const response = await fetch("/api/admin/users", {
+    headers: getAuthHeaders(),
+  });
+  
+  if (response.status === 401) {
+    throw new Error("Unauthorized - please log in again");
+  }
+  
+  if (response.status === 403) {
+    throw new Error("Access denied - admin only");
+  }
+  
+  if (!response.ok) {
+    throw new Error("Failed to fetch users");
+  }
+  
+  return response.json();
+}
+
+// Fetch all institutions (admin only)
+export async function fetchAdminInstitutions(): Promise<AdminInstitution[]> {
+  const response = await fetch("/api/admin/institutions", {
+    headers: getAuthHeaders(),
+  });
+  
+  if (response.status === 401) {
+    throw new Error("Unauthorized - please log in again");
+  }
+  
+  if (response.status === 403) {
+    throw new Error("Access denied - admin only");
+  }
+  
+  if (!response.ok) {
+    throw new Error("Failed to fetch institutions");
+  }
+  
+  return response.json();
+}
+
+// Update user role (admin only)
+export async function updateUserRole(
+  userId: string,
+  role: string,
+  institutionId?: string
+): Promise<void> {
+  const response = await fetch(`/api/admin/users/${userId}/role`, {
+    method: "PATCH",
+    headers: {
+      ...getAuthHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ role, institutionId }),
+  });
+  
+  if (response.status === 401) {
+    throw new Error("Unauthorized - please log in again");
+  }
+  
+  if (response.status === 403) {
+    throw new Error("Access denied - admin only");
+  }
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to update user role");
+  }
+}

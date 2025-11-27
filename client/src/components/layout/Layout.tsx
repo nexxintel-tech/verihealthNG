@@ -9,7 +9,8 @@ import {
   LogOut,
   Search,
   Menu,
-  UserCheck
+  UserCheck,
+  Shield
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ export default function Layout({ children }: LayoutProps) {
     { href: "/patients", icon: Users, label: isPatient ? "My Profile" : "Patients", roles: ['patient', 'clinician', 'admin', 'institution_admin'] },
     { href: "/alerts", icon: Bell, label: "Alerts", roles: ['clinician', 'admin', 'institution_admin'] },
     { href: "/admin/clinician-approvals", icon: UserCheck, label: "Clinician Approvals", roles: ['institution_admin'] },
+    { href: "/admin/users", icon: Shield, label: "Admin Panel", roles: ['admin'] },
     { href: "/settings", icon: Settings, label: "Settings", roles: ['patient', 'clinician', 'admin', 'institution_admin'] },
   ];
 
