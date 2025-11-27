@@ -74,6 +74,8 @@ export const alerts = pgTable("alerts", {
   message: text("message").notNull(),
   severity: text("severity").notNull(),
   isRead: boolean("is_read").notNull().default(false),
+  respondedById: varchar("responded_by_id").references(() => users.id),
+  respondedAt: timestamp("responded_at"),
   timestamp: timestamp("timestamp").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });

@@ -852,6 +852,177 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get top performing clinicians (for dashboard widget)
+  app.get("/api/clinicians/top-performers", authenticateUser, async (req, res) => {
+    try {
+      // Get all approved clinicians with their profiles
+      const { data: clinicians, error: cliniciansError } = await supabase
+        .from('users')
+        .select(`
+          id,
+          email,
+          institution_id,
+          created_at
+        `)
+        .eq('role', 'clinician')
+        .eq('approval_status', 'approved');
+
+      if (cliniciansError) throw cliniciansError;
+
+      if (!clinicians || clinicians.length === 0) {
+        return res.json([]);
+      }
+
+      const clinicianIds = clinicians.map(c => c.id);
+
+      // Get clinician profiles
+      const { data: profiles } = await supabase
+        .from('clinician_profiles')
+        .select('user_id, full_name, specialty')
+        .in('user_id', clinicianIds);
+
+      const profilesByUserId = profiles?.reduce((acc, p) => {
+        acc[p.user_id] = p;
+        return acc;
+      }, {} as Record<string, any>) || {};
+
+      // Get alerts with response times (where clinician responded)
+      const { data: respondedAlerts } = await supabase
+        .from('alerts')
+        .select('id, responded_by_id, timestamp, responded_at')
+        .not('responded_by_id', 'is', null)
+        .not('responded_at', 'is', null);
+
+      // Calculate average response time per clinician
+      const responseTimesByClinicianId: Record<string, number[]> = {};
+      respondedAlerts?.forEach(alert => {
+        if (alert.responded_by_id && alert.responded_at && alert.timestamp) {
+          const responseTimeMs = new Date(alert.responded_at).getTime() - new Date(alert.timestamp).getTime();
+          if (responseTimeMs > 0) {
+            if (!responseTimesByClinicianId[alert.responded_by_id]) {
+              responseTimesByClinicianId[alert.responded_by_id] = [];
+            }
+            responseTimesByClinicianId[alert.responded_by_id].push(responseTimeMs);
+          }
+        }
+      });
+
+      // Calculate average response time per clinician
+      const avgResponseTimeByClinicianId: Record<string, number> = {};
+      Object.entries(responseTimesByClinicianId).forEach(([clinicianId, times]) => {
+        avgResponseTimeByClinicianId[clinicianId] = times.reduce((a, b) => a + b, 0) / times.length;
+      });
+
+      // Get risk score improvements (patient outcomes)
+      // For this, we track when risk scores decreased over time
+      const { data: riskScores } = await supabase
+        .from('risk_scores')
+        .select('patient_id, score, created_at')
+        .order('created_at', { ascending: true });
+
+      // Group risk scores by patient and calculate improvement
+      const riskScoresByPatient: Record<string, { score: number; createdAt: string }[]> = {};
+      riskScores?.forEach(rs => {
+        if (!riskScoresByPatient[rs.patient_id]) {
+          riskScoresByPatient[rs.patient_id] = [];
+        }
+        riskScoresByPatient[rs.patient_id].push({ score: rs.score, createdAt: rs.created_at });
+      });
+
+      // Calculate patient improvements (where risk score decreased)
+      let totalPatients = 0;
+      let patientsImproved = 0;
+      Object.values(riskScoresByPatient).forEach(scores => {
+        if (scores.length >= 2) {
+          totalPatients++;
+          const firstScore = scores[0].score;
+          const lastScore = scores[scores.length - 1].score;
+          if (lastScore < firstScore) {
+            patientsImproved++;
+          }
+        }
+      });
+
+      // Calculate institution improvement rate (shared metric for all clinicians in same institution)
+      const improvementRate = totalPatients > 0 ? Math.round((patientsImproved / totalPatients) * 100) : 0;
+
+      // Build the top performers list
+      const topPerformers = clinicians.map(clinician => {
+        const profile = profilesByUserId[clinician.id];
+        const avgResponseMs = avgResponseTimeByClinicianId[clinician.id];
+        const alertsRespondedTo = responseTimesByClinicianId[clinician.id]?.length || 0;
+
+        // Convert response time to human-readable format
+        let avgResponseTime = 'N/A';
+        if (avgResponseMs) {
+          const minutes = Math.floor(avgResponseMs / 60000);
+          const hours = Math.floor(minutes / 60);
+          if (hours > 0) {
+            avgResponseTime = `${hours}h ${minutes % 60}m`;
+          } else {
+            avgResponseTime = `${minutes}m`;
+          }
+        }
+
+        // Calculate a performance score (lower response time + higher improvement = better)
+        let performanceScore = 0;
+        if (avgResponseMs) {
+          // Response time score: faster = higher (max 50 points for <5 min response)
+          const responseScore = Math.max(0, 50 - (avgResponseMs / 60000 / 5) * 10);
+          performanceScore += responseScore;
+        }
+        // Improvement rate contributes to score (max 50 points)
+        performanceScore += (improvementRate / 100) * 50;
+
+        return {
+          id: clinician.id,
+          name: profile?.full_name || clinician.email.split('@')[0],
+          specialty: profile?.specialty || 'General',
+          avgResponseTime,
+          avgResponseTimeMs: avgResponseMs || null,
+          alertsRespondedTo,
+          patientOutcomeRate: improvementRate,
+          performanceScore: Math.round(performanceScore),
+        };
+      });
+
+      // Sort by performance score (highest first)
+      topPerformers.sort((a, b) => b.performanceScore - a.performanceScore);
+
+      // Return top 5
+      res.json(topPerformers.slice(0, 5));
+    } catch (error) {
+      console.error("Error fetching top performers:", error);
+      res.status(500).json({ error: "Failed to fetch top performers" });
+    }
+  });
+
+  // Update alert with response (when clinician marks alert as read)
+  app.patch("/api/alerts/:id/respond", authenticateUser, requireRole('clinician', 'admin'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const clinicianId = req.user!.id;
+
+      const { data, error } = await supabase
+        .from("alerts")
+        .update({ 
+          is_read: true,
+          responded_by_id: clinicianId,
+          responded_at: new Date().toISOString()
+        })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      res.json(data);
+    } catch (error) {
+      console.error("Error responding to alert:", error);
+      res.status(500).json({ error: "Failed to respond to alert" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
