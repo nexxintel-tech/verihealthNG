@@ -1012,6 +1012,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================
+  // SUPER ADMIN ENDPOINTS (System admin only)
+  // ============================================================
+
+  // Get all users (admin only)
+  app.get("/api/admin/users", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id, email, role, institution_id, approval_status, created_at')
+        .order('created_at', { ascending: false });
+
+      if (usersError) throw usersError;
+
+      // Get institution names
+      const { data: institutions } = await supabase
+        .from('institutions')
+        .select('id, name');
+
+      const institutionMap = institutions?.reduce((acc, inst) => {
+        acc[inst.id] = inst.name;
+        return acc;
+      }, {} as Record<string, string>) || {};
+
+      // Get clinician profiles for names
+      const { data: profiles } = await supabase
+        .from('clinician_profiles')
+        .select('user_id, full_name');
+
+      const profileMap = profiles?.reduce((acc, p) => {
+        acc[p.user_id] = p.full_name;
+        return acc;
+      }, {} as Record<string, string>) || {};
+
+      const transformedUsers = users?.map(user => ({
+        id: user.id,
+        email: user.email,
+        name: profileMap[user.id] || user.email.split('@')[0],
+        role: user.role,
+        institutionId: user.institution_id,
+        institutionName: user.institution_id ? institutionMap[user.institution_id] : null,
+        approvalStatus: user.approval_status,
+        createdAt: user.created_at,
+      })) || [];
+
+      res.json(transformedUsers);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  // Update user role (admin only)
+  app.patch("/api/admin/users/:id/role", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { role, institutionId } = req.body;
+      const adminId = req.user!.id;
+
+      // Prevent admin from changing their own role
+      if (id === adminId) {
+        return res.status(400).json({ error: "Cannot change your own role" });
+      }
+
+      // Validate role
+      const validRoles = ['patient', 'clinician', 'admin', 'institution_admin'];
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ error: "Invalid role" });
+      }
+
+      // Build update object
+      const updateData: any = { role };
+      
+      // Institution admin and clinician require institution assignment
+      if (role === 'institution_admin' || role === 'clinician') {
+        if (!institutionId) {
+          return res.status(400).json({ error: "Institution is required for this role" });
+        }
+        updateData.institution_id = institutionId;
+        
+        // Auto-approve if becoming institution_admin
+        if (role === 'institution_admin') {
+          updateData.approval_status = 'approved';
+        }
+      }
+
+      // If changing to patient or admin, clear institution requirement
+      if (role === 'patient' || role === 'admin') {
+        updateData.institution_id = null;
+        updateData.approval_status = null;
+      }
+
+      const { data, error: updateError } = await supabase
+        .from('users')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      if (!data) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      res.json({ message: "User role updated successfully", user: data });
+    } catch (error) {
+      console.error("Error updating user role:", error);
+      res.status(500).json({ error: "Failed to update user role" });
+    }
+  });
+
+  // Get all institutions (admin only - for assignment dropdown)
+  app.get("/api/admin/institutions", authenticateUser, requireRole('admin'), async (req, res) => {
+    try {
+      const { data: institutions, error } = await supabase
+        .from('institutions')
+        .select('id, name, address, contact_email, is_default')
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+
+      res.json(institutions || []);
+    } catch (error) {
+      console.error("Error fetching institutions:", error);
+      res.status(500).json({ error: "Failed to fetch institutions" });
+    }
+  });
+
   // Get top performing clinicians (for dashboard widget)
   // Shows top performers within the user's institution only
   app.get("/api/clinicians/top-performers", authenticateUser, async (req, res) => {
