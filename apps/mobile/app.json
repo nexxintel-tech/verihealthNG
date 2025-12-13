@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "VeriHealth Mobile",
+    "slug": "verihealth-mobile",
+    "platforms": ["ios", "android", "web"],
+    "sdkVersion": "48.0.0",
+    "version": "1.0.0"
+  }
+}
