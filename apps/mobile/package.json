@@ -16,4 +16,11 @@
     "@react-native-async-storage/async-storage": "^1.17.11",
     "@verihealth/common": "1.0.0"
   }
+  ,
+  "devDependencies": {
+    "expo-dev-client": "~2.0.0",
+    "expo-task-manager": "~12.0.0",
+    "expo-background-fetch": "~12.0.0",
+    "react-native-ble-plx": "^2.0.0"
+  }
 }
