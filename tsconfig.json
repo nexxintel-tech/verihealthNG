@@ -16,8 +16,10 @@
     "baseUrl": ".",
     "types": ["node", "vite/client"],
     "paths": {
-      "@/*": ["./client/src/*"],
-      "@shared/*": ["./shared/*"]
+      "@/*": ["./apps/web/src/*"],
+      "@shared/*": ["./shared/*"],
+      "@verihealth/common": ["./packages/common/src/index.ts"],
+      "@verihealth/common/*": ["./packages/common/src/*"]
     }
   }
 }
