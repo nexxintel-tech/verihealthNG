@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { StorageAdapter } from '@verihealth/common';
 
+// The existing AsyncStorage adapter is kept for non-secret storage only.
+// Secrets (device_secret) must use SecureStore via SecureDeviceStore.
 export const ReactNativeAsyncStorageAdapter: StorageAdapter = {
   async getItem(key: string) {
     return await AsyncStorage.getItem(key);
